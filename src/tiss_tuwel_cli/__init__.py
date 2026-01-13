@@ -18,13 +18,13 @@ Example usage:
 __version__ = "0.1.0"
 __author__ = "TU Wien Companion Contributors"
 
-from tiss_tuwel_cli.config import ConfigManager
 from tiss_tuwel_cli.clients.tiss import TissClient
 from tiss_tuwel_cli.clients.tuwel import TuwelClient
+from tiss_tuwel_cli.config import ConfigManager
 
 __all__ = [
     "ConfigManager",
-    "TissClient", 
+    "TissClient",
     "TuwelClient",
     "__version__",
 ]

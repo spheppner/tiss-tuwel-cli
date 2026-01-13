@@ -13,8 +13,8 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
 
-from tiss_tuwel_cli.config import ConfigManager
 from tiss_tuwel_cli.clients.tuwel import TuwelClient
+from tiss_tuwel_cli.config import ConfigManager
 from tiss_tuwel_cli.utils import parse_mobile_token
 
 console = Console()

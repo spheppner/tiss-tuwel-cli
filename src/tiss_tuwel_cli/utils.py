@@ -6,6 +6,8 @@ and other common operations used across the application.
 """
 
 import base64
+import html
+import re
 import urllib.parse
 from datetime import datetime
 from typing import Optional
@@ -76,3 +78,34 @@ def parse_mobile_token(token_string: str) -> Optional[str]:
         pass
 
     return None
+
+
+def strip_html(html_string: str) -> str:
+    """
+    Remove HTML tags and decode HTML entities from a string.
+    
+    Args:
+        html_string: String potentially containing HTML markup.
+        
+    Returns:
+        Clean text with HTML tags removed and entities decoded.
+    
+    Example:
+        >>> strip_html('<span class="test">Hello &amp; World</span>')
+        'Hello & World'
+        >>> strip_html('<i class="icon fa fa-check"></i>30,00')
+        '30,00'
+    """
+    if not html_string:
+        return ""
+
+    # Remove all HTML tags
+    text = re.sub(r'<[^>]+>', '', html_string)
+
+    # Decode HTML entities (e.g., &ndash; &nbsp; &amp;)
+    text = html.unescape(text)
+
+    # Normalize whitespace
+    text = ' '.join(text.split())
+
+    return text.strip()

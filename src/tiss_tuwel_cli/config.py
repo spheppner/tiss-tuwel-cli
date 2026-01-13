@@ -29,7 +29,7 @@ class ConfigManager:
         >>> config.set_tuwel_token("my_token")
         >>> token = config.get_tuwel_token()
     """
-    
+
     def __init__(self, config_dir: Optional[Path] = None, config_file: Optional[Path] = None):
         """
         Initialize the configuration manager.

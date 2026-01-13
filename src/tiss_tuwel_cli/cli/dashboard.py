@@ -25,7 +25,7 @@ def dashboard():
     """
     # Import here to avoid circular imports
     from tiss_tuwel_cli.cli import get_tuwel_client
-    
+
     client = get_tuwel_client()
     with console.status("[bold green]Fetching data...[/bold green]"):
         try:

@@ -6,23 +6,48 @@ for interacting with TISS and TUWEL services.
 """
 
 import typer
-from rich.console import Console
 from rich import print as rprint
+from rich.console import Console
 
-from tiss_tuwel_cli.config import ConfigManager
 from tiss_tuwel_cli.clients.tiss import TissClient
 from tiss_tuwel_cli.clients.tuwel import TuwelClient
+from tiss_tuwel_cli.config import ConfigManager
 
 # Initialize the CLI application
 app = typer.Typer(
     help="TU Wien Companion - TISS & TUWEL CLI",
     add_completion=False,
+    invoke_without_command=True,
 )
 
 # Shared console and configuration instances
 console = Console()
 config = ConfigManager()
 tiss = TissClient()
+
+
+@app.callback()
+def main(
+    ctx: typer.Context,
+    interactive: bool = typer.Option(
+        False,
+        "--interactive",
+        "-i",
+        help="Start in interactive menu mode",
+    ),
+):
+    """
+    TU Wien Companion - TISS & TUWEL CLI.
+    
+    Use -i or --interactive to start in interactive menu mode.
+    """
+    if interactive:
+        from tiss_tuwel_cli.cli.interactive import interactive as run_interactive
+        run_interactive()
+        raise typer.Exit()
+    elif ctx.invoked_subcommand is None:
+        # No command and no interactive flag - show help
+        rprint(ctx.get_help())
 
 
 def get_tuwel_client() -> TuwelClient:
@@ -44,9 +69,7 @@ def get_tuwel_client() -> TuwelClient:
 
 
 # Import and register command modules
-from tiss_tuwel_cli.cli import auth
-from tiss_tuwel_cli.cli import courses
-from tiss_tuwel_cli.cli import dashboard
+from tiss_tuwel_cli.cli import auth, courses, dashboard
 
 # Register commands from submodules
 app.command()(auth.login)
