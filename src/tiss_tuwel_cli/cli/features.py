@@ -480,10 +480,10 @@ def compare_courses():
     rprint(Panel("[bold]Course Workload Comparison[/bold]", expand=False))
     rprint()
     
-    table = Table(title="All Courses Overview", expand=True)
+    table = Table(title="All Courses Overview", expand=True, show_header=True, header_style="bold cyan")
     table.add_column("Course", style="cyan", no_wrap=False)
     table.add_column("Pending\nAssignments", justify="center")
-    table.add_column("Checkmarks", justify="center")
+    table.add_column("Checkmark\nProgress", justify="center", no_wrap=False)
     table.add_column("Current\nGrade", justify="center")
     table.add_column("Status", justify="center")
     
@@ -518,25 +518,43 @@ def compare_courses():
         assignments_str = (
             f"[red]{stats['pending_assignments']}[/red]"
             if stats['pending_assignments'] > 2
-            else str(stats['pending_assignments'])
+            else f"[yellow]{stats['pending_assignments']}[/yellow]"
+            if stats['pending_assignments'] > 0
+            else "[green]0[/green]"
         )
         
-        checkmarks_str = "-"
+        # Create visual progress bar for checkmarks
         if stats['checkmark_completion'] > 0:
-            pct = stats['checkmark_completion']
-            color = "green" if pct >= 80 else "yellow" if pct >= 50 else "red"
-            checkmarks_str = f"[{color}]{pct:.0f}%[/{color}]"
+            completion = stats['checkmark_completion']
+            bar_length = 10
+            filled = int(completion / 100 * bar_length)
+            bar = "█" * filled + "░" * (bar_length - filled)
+            
+            if completion >= 80:
+                color = "green"
+            elif completion >= 50:
+                color = "yellow"
+            else:
+                color = "red"
+            
+            checkmark_str = f"[{color}]{bar}[/{color}] {completion:.0f}%"
+        else:
+            checkmark_str = "[dim]No data[/dim]"
         
-        grade_str = "-"
-        if stats['grade_pct'] is not None:
-            pct = stats['grade_pct']
-            color = "green" if pct >= 75 else "yellow" if pct >= 50 else "red"
-            grade_str = f"[{color}]{pct:.0f}%[/{color}]"
+        grade_str = (
+            f"[green]{stats['grade_pct']:.0f}%[/green]"
+            if stats['grade_pct'] and stats['grade_pct'] >= 75
+            else f"[yellow]{stats['grade_pct']:.0f}%[/yellow]"
+            if stats['grade_pct'] and stats['grade_pct'] >= 50
+            else f"[red]{stats['grade_pct']:.0f}%[/red]"
+            if stats['grade_pct']
+            else "[dim]N/A[/dim]"
+        )
         
         table.add_row(
             stats['name'],
             assignments_str,
-            checkmarks_str,
+            checkmark_str,
             grade_str,
             status
         )

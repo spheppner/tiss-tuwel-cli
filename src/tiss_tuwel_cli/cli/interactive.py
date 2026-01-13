@@ -1202,13 +1202,49 @@ class InteractiveMenu:
         self._wait_for_continue()
 
     def _show_weekly_overview(self):
-        """Show events and deadlines for the current week."""
+        """Show events and deadlines for the current week, including exam dates."""
         self._clear_screen()
         self._print_header("This Week")
 
-        weekly = self._get_weekly_overview()
+        with console.status("[bold green]Fetching weekly events...[/bold green]"):
+            weekly = self._get_weekly_overview()
+            
+            # Also get exam alerts that fall in this week
+            exam_alerts = self._get_exam_alerts()
 
-        if not weekly:
+        all_events = []
+        
+        # Add TUWEL events
+        for event in weekly:
+            all_events.append({
+                'type': 'tuwel',
+                'name': event.get('name', 'Unknown'),
+                'course': event.get('course', {}).get('shortname', ''),
+                'timestart': event.get('timestart', 0),
+                'source': '📚 TUWEL'
+            })
+        
+        # Add exam dates from TISS that are within this week
+        now = datetime.now().timestamp()
+        week_later = now + (7 * SECONDS_PER_DAY)
+        
+        for alert in exam_alerts:
+            exam_date_str = alert.get('exam_date')
+            if exam_date_str:
+                try:
+                    exam_time = datetime.fromisoformat(exam_date_str.replace('Z', '+00:00')).replace(tzinfo=None).timestamp()
+                    if now <= exam_time <= week_later:
+                        all_events.append({
+                            'type': 'exam',
+                            'name': f"Exam - {alert.get('mode', 'Unknown')}",
+                            'course': alert.get('course', ''),
+                            'timestart': exam_time,
+                            'source': '🎓 TISS Exam'
+                        })
+                except Exception:
+                    pass
+
+        if not all_events:
             rprint("[yellow]No events or deadlines in the next 7 days.[/yellow]")
             rprint()
             rprint("[green]🎉 Enjoy your free week![/green]")
@@ -1218,36 +1254,56 @@ class InteractiveMenu:
         # Group by day
         by_day: Dict[str, List[dict]] = defaultdict(list)
 
-        for event in weekly:
+        for event in sorted(all_events, key=lambda x: x['timestart']):
             event_time = event.get('timestart', 0)
             day = datetime.fromtimestamp(event_time).strftime('%A, %b %d')
             by_day[day].append(event)
 
-        now = datetime.now().timestamp()
-
+        # Display events grouped by day
         for day, events in by_day.items():
             console.print(f"[bold cyan]📅 {day}[/bold cyan]")
             for event in events:
-                course = event.get('course', {}).get('shortname', '')
                 event_name = event.get('name', 'Unknown')
+                course = event.get('course', '')
                 event_time = event.get('timestart', 0)
                 time_str = datetime.fromtimestamp(event_time).strftime('%H:%M')
+                source = event.get('source', '')
+                event_type = event.get('type', '')
 
                 days_left = (event_time - now) / SECONDS_PER_DAY
-                if days_left < 1:
+                
+                # Different styling for exams vs regular events
+                if event_type == 'exam':
+                    style = "bold magenta"
+                    icon = "🎓"
+                elif days_left < 1:
                     style = "bold red"
+                    icon = "🔥"
                 elif days_left < 2:
                     style = "yellow"
+                    icon = "⏰"
                 else:
                     style = "white"
+                    icon = "📌"
 
-                console.print(f"   [{style}]{time_str}[/{style}] [{style}]{course}[/{style}] - {event_name}")
+                console.print(
+                    f"   {icon} [{style}]{time_str}[/{style}] "
+                    f"[{style}]{course}[/{style}] - {event_name} "
+                    f"[dim]({source})[/dim]"
+                )
             console.print()
 
         # Summary
-        total = len(weekly)
-        urgent = sum(1 for e in weekly if (e.get('timestart', 0) - now) < SECONDS_PER_DAY)
-        rprint(f"[dim]Total: {total} events/deadlines this week")
+        total = len(all_events)
+        urgent = sum(1 for e in all_events if (e.get('timestart', 0) - now) < SECONDS_PER_DAY)
+        exams = sum(1 for e in all_events if e.get('type') == 'exam')
+        
+        summary_text = f"[dim]Total: {total} events/deadlines this week"
+        if exams > 0:
+            summary_text += f" | {exams} exam(s)"
+        summary_text += "[/dim]"
+        
+        rprint(summary_text)
         if urgent > 0:
             rprint(f"[bold red]⚠️ {urgent} in the next 24 hours![/bold red]")
 
