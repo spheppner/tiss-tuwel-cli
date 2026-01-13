@@ -17,6 +17,13 @@ A Python CLI tool for TU Wien students to interact with the public TISS API and 
   - View exam dates and registration info
   - Access public university events
 
+- **Smart Student Features** (Interactive Mode):
+  - 🔔 **Exam Registration Alerts** - Get notified before exam registration opens
+  - 📊 **Study Progress Tracking** - See completion rates for checkmarks and assignments
+  - 📅 **Weekly Overview** - Plan your week with all upcoming deadlines
+  - 🏆 **Grade Summary** - View grades across courses with Austrian grading scale
+  - 💡 **Smart Tips** - Context-aware suggestions based on your academic situation
+
 ## Installation
 
 ```bash
@@ -49,6 +56,11 @@ tiss-tuwel-cli --interactive
 **Features of Interactive Mode:**
 - **Keyboard Navigation** - Use arrow keys to navigate, Enter to select (no typing required)
 - **Smart Dashboard** - See upcoming deadlines with color-coded urgency levels
+- **🆕 Exam Registration Alerts** - Get notified when exam registration opens or is about to open
+- **🆕 Study Progress Tracker** - Track your checkmark completion and pending assignments
+- **🆕 Weekly Overview** - See all deadlines and events for the current week
+- **🆕 Grade Summary** - View your grades across all courses with pass/fail indicators
+- **🆕 Smart Tips** - Context-aware suggestions based on your deadlines and progress
 - **Login from Menu** - Authenticate directly from the interactive menu
 - **Course Browser** - Navigate through courses, view grades, assignments, and download materials
 - **Kreuzerlübungen Overview** - Grouped by course with completion statistics

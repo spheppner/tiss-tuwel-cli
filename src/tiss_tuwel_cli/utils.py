@@ -173,14 +173,16 @@ def extract_course_number(shortname: str) -> Optional[str]:
 def get_current_semester() -> str:
     """
     Get the current semester code based on the current date.
-    
-    TU Wien semesters:
-    - Winter semester (W): October - February
-    - Summer semester (S): March - September
-    
+
+    TU Wien semesters follow this pattern:
+    - Winter semester (W): October to February (spans two calendar years)
+      - Oct-Dec: Uses current year (e.g., 2024W in October 2024)
+      - Jan-Feb: Uses previous year (e.g., 2024W in January 2025)
+    - Summer semester (S): March to September (e.g., 2024S)
+
     Returns:
         Semester code in format "YYYYS" or "YYYYW".
-    
+
     Example:
         >>> # If current date is January 2024
         >>> get_current_semester()
@@ -192,7 +194,7 @@ def get_current_semester() -> str:
     now = datetime.now()
     year = now.year
     month = now.month
-    
+
     if month >= 10:
         # October onwards is winter semester of this year
         return f"{year}W"

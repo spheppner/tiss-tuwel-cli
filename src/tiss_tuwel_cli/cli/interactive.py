@@ -33,6 +33,12 @@ console = Console()
 config = ConfigManager()
 tiss = TissClient()
 
+# Constants for time calculations and thresholds
+SECONDS_PER_DAY = 86400
+EXAM_ALERT_DAYS_BEFORE = 14  # Show alerts for registrations opening within this many days
+EXAM_ALERT_DAYS_AFTER = 7   # Show alerts for registrations that opened within this many days
+MAX_COURSES_FOR_GRADES = 5   # Limit API calls when fetching grade summaries
+
 
 class InteractiveMenu:
     """
@@ -125,10 +131,10 @@ class InteractiveMenu:
                         days_to_reg = days_until(reg_start)
                         days_to_exam = days_until(exam_date) if exam_date else None
                         
-                        # Alert if registration starts within 14 days
+                        # Alert if registration starts within configured days
                         # or is currently open (reg_start passed but reg_end not)
                         if days_to_reg is not None:
-                            if -7 <= days_to_reg <= 14:
+                            if -EXAM_ALERT_DAYS_AFTER <= days_to_reg <= EXAM_ALERT_DAYS_BEFORE:
                                 alert = {
                                     'course': shortname,
                                     'course_fullname': course.get('fullname', shortname),
@@ -165,10 +171,10 @@ class InteractiveMenu:
         try:
             upcoming = client.get_upcoming_calendar()
             events = upcoming.get('events', [])
-            
+
             # Filter to next 7 days
             now = datetime.now().timestamp()
-            week_later = now + (7 * 86400)
+            week_later = now + (7 * SECONDS_PER_DAY)
             
             weekly = []
             for event in events:
@@ -217,7 +223,7 @@ class InteractiveMenu:
                     due = assign.get('duedate', 0)
                     if due > now:
                         pending_assignments += 1
-                    elif due > now - (7 * 86400):
+                    elif due > now - (7 * SECONDS_PER_DAY):
                         # Overdue within last week
                         overdue_assignments += 1
             
@@ -251,9 +257,9 @@ class InteractiveMenu:
         
         try:
             courses = client.get_enrolled_courses('inprogress')
-            
+
             course_grades = []
-            for course in courses[:5]:  # Limit to avoid too many API calls
+            for course in courses[:MAX_COURSES_FOR_GRADES]:
                 try:
                     report = client.get_user_grades_table(course['id'], user_id)
                     tables = report.get('tables', [])
@@ -399,7 +405,7 @@ class InteractiveMenu:
                     # Color based on urgency
                     now = datetime.now().timestamp()
                     event_time = event.get('timestart', 0)
-                    days_left = (event_time - now) / 86400
+                    days_left = (event_time - now) / SECONDS_PER_DAY
 
                     if days_left < 1:
                         style = "bold red"
@@ -458,7 +464,7 @@ class InteractiveMenu:
         # Deadline-related tips
         if events:
             now = datetime.now().timestamp()
-            urgent = [e for e in events if (e.get('timestart', 0) - now) < 86400]
+            urgent = [e for e in events if (e.get('timestart', 0) - now) < SECONDS_PER_DAY]
             if urgent:
                 tips.append(f"⏰ You have {len(urgent)} deadline(s) in the next 24 hours!")
         
@@ -867,7 +873,7 @@ class InteractiveMenu:
                     if due < now:
                         status = "[red]Closed[/red]"
                     else:
-                        days_left = (due - now) / 86400
+                        days_left = (due - now) / SECONDS_PER_DAY
                         if days_left < 1:
                             status = "[bold red]Due Soon![/bold red]"
                         elif days_left < 3:
@@ -1149,7 +1155,7 @@ class InteractiveMenu:
                 event_time = event.get('timestart', 0)
                 time_str = datetime.fromtimestamp(event_time).strftime('%H:%M')
 
-                days_left = (event_time - now) / 86400
+                days_left = (event_time - now) / SECONDS_PER_DAY
                 if days_left < 1:
                     style = "bold red"
                 elif days_left < 2:
@@ -1162,7 +1168,7 @@ class InteractiveMenu:
 
         # Summary
         total = len(weekly)
-        urgent = sum(1 for e in weekly if (e.get('timestart', 0) - now) < 86400)
+        urgent = sum(1 for e in weekly if (e.get('timestart', 0) - now) < SECONDS_PER_DAY)
         rprint(f"[dim]Total: {total} events/deadlines this week")
         if urgent > 0:
             rprint(f"[bold red]⚠️ {urgent} in the next 24 hours![/bold red]")
