@@ -202,9 +202,7 @@ class TuwelClient:
             >>> for cm in data.get('checkmarks', []):
             ...     print(cm['name'])
         """
-        params = {}
-        for i, cid in enumerate(course_ids):
-            params[f"courseids[{i}]"] = cid
+        params = {"courseids": course_ids}
         return self._call("mod_checkmark_get_checkmarks_by_courses", params)
 
     def get_course_contents(self, course_id: int) -> List[Dict[str, Any]]:

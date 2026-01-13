@@ -22,7 +22,6 @@ SHELL_COMMANDS = {
     "quit": "Exit the shell",
     "clear": "Clear the screen",
     "login": "Automated login (browser)",
-    "setup": "Manual token setup",
     "dashboard": "Show dashboard with upcoming events",
     "courses": "List enrolled courses",
     "assignments": "List assignments",
@@ -99,7 +98,7 @@ def print_help():
     for cmd, desc in sorted_commands:
         if cmd in ["help", "exit", "quit", "clear"]:
             special.append((cmd, desc))
-        elif cmd in ["login", "setup"]:
+        elif cmd in ["login"]:
             auth.append((cmd, desc))
         elif cmd in ["dashboard", "courses", "assignments", "grades", "checkmarks",
                      "download", "tiss-course", "interactive"]:

@@ -71,26 +71,26 @@ class TissClient:
                 try:
                     import xml.etree.ElementTree as ET
                     root = ET.fromstring(response.content)
-                    
+
                     # Namespaces found in the TISS response
                     ns = {
                         '': 'https://tiss.tuwien.ac.at/api/schemas/course/v10',
                         'ns2': 'https://tiss.tuwien.ac.at/api/schemas/i18n/v10'
                     }
-                    
+
                     # The root might be <tuvienna>, we need to find <course> inside it
                     # Note: find() with default namespace requires explicit namespace URI in path or strict Usage
                     # We'll try finding 'course' with the namespace
                     course_elem = root.find(f"{{{ns['']}}}course")
                     # If not found directly, maybe root IS the course or different structure, try relative find
                     if course_elem is None:
-                        course_elem = root.find('course') # Try without NS if previous failed
+                        course_elem = root.find('course')  # Try without NS if previous failed
                     if course_elem is None:
                         # Maybe root is the course itself (unlikely based on provided XML but possible)
                         course_elem = root
 
                     result = {}
-                    
+
                     # Helper to get text from element with namespace
                     def get_text(elem, tag, namespace=ns['']):
                         # Try with namespace first
@@ -102,7 +102,7 @@ class TissClient:
                         if sub is not None:
                             return sub.text
                         return None
-                    
+
                     # Parse course details
                     result['courseNumber'] = get_text(course_elem, 'courseNumber')
                     result['semester'] = get_text(course_elem, 'semesterCode')
@@ -120,9 +120,9 @@ class TissClient:
                             'de': get_text(title_elem, 'de', ns['ns2'])
                         }
                     else:
-                         # Fallback if title element not found standard way
-                         result['title'] = {'en': 'Unknown Course', 'de': 'Unbekannter Kurs'}
-                        
+                        # Fallback if title element not found standard way
+                        result['title'] = {'en': 'Unknown Course', 'de': 'Unbekannter Kurs'}
+
                     return result
                 except Exception as xml_e:
                     # Return a clear error if both JSON and XML fail

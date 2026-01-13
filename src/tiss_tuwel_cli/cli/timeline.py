@@ -9,13 +9,13 @@ from typing import Optional
 from rich import print as rprint
 from rich.console import Console
 from rich.panel import Panel
-from rich.table import Table
 
 from tiss_tuwel_cli.cli import get_tuwel_client
 from tiss_tuwel_cli.clients.tiss import TissClient
 from tiss_tuwel_cli.utils import extract_course_number, timestamp_to_date
 
 console = Console()
+
 
 def timeline(export: bool = False, output: Optional[str] = None):
     """
@@ -32,10 +32,10 @@ def timeline(export: bool = False, output: Optional[str] = None):
         # 1. Fetch TUWEL Calendar (Upcoming view)
         upcoming = client.get_upcoming_calendar()
         tuwel_events = upcoming.get('events', [])
-        
+
         # 2. Fetch Enrolled Courses (to map to TISS)
         courses = client.get_enrolled_courses('inprogress')
-        
+
         # 3. Fetch TISS Exams for each course
         tiss_exams = []
         for course in courses:
@@ -53,7 +53,7 @@ def timeline(export: bool = False, output: Optional[str] = None):
 
     # 4. Merge Events
     timeline_events = []
-    
+
     # Process TUWEL events
     for event in tuwel_events:
         start_ts = event.get('timestart', 0)
@@ -69,10 +69,10 @@ def timeline(export: bool = False, output: Optional[str] = None):
 
     # Process TISS exams
     for exam in tiss_exams:
-        date_str = exam.get('date', '') # Format usually ISO YYYY-MM-DDThh:mm:ss
+        date_str = exam.get('date', '')  # Format usually ISO YYYY-MM-DDThh:mm:ss
         course_name = exam.get('course_name', 'Unknown')
         mode = exam.get('mode', 'Exam')
-        
+
         try:
             # TISS dates are usually ISO-like
             if 'T' in date_str:
@@ -81,10 +81,10 @@ def timeline(export: bool = False, output: Optional[str] = None):
                 formatted_date = dt.strftime('%Y-%m-%d %H:%M')
             else:
                 # Fallback if format is different
-                ts = 0 
+                ts = 0
                 formatted_date = date_str
-            
-            if ts > datetime.now().timestamp(): # Only future exams
+
+            if ts > datetime.now().timestamp():  # Only future exams
                 timeline_events.append({
                     'timestamp': ts,
                     'date_str': formatted_date,
@@ -94,7 +94,7 @@ def timeline(export: bool = False, output: Optional[str] = None):
                     'raw': exam
                 })
         except Exception:
-            pass # Skip if date parsing fails
+            pass  # Skip if date parsing fails
 
     # 5. Sort by timestamp
     timeline_events.sort(key=lambda x: x['timestamp'])
@@ -104,6 +104,7 @@ def timeline(export: bool = False, output: Optional[str] = None):
         _export_timeline(timeline_events, output)
     else:
         _display_timeline(timeline_events)
+
 
 def _display_timeline(events):
     if not events:
@@ -118,10 +119,10 @@ def _display_timeline(events):
     for event in events:
         ts = event['timestamp']
         days_diff = (ts - now) / 86400
-        
+
         if days_diff < 0:
-            continue # Should fitlered out, but just in case
-            
+            continue  # Should fitlered out, but just in case
+
         time_text = ""
         if days_diff < 1:
             hours_diff = (ts - now) / 3600
@@ -135,20 +136,21 @@ def _display_timeline(events):
             color = "green" if days_diff > 7 else "yellow"
 
         source_tag = f"[blue](TISS)[/blue]" if event['source'] == 'TISS' else f"[magenta](TUWEL)[/magenta]"
-        
+
         rprint(f"[{color}]{time_text}[/{color}]: [bold]{event['name']}[/bold] {source_tag}")
         rprint(f"  [dim]{event['course']} | {event['date_str']}[/dim]")
         rprint()
 
+
 def _export_timeline(events, output_file):
     # Re-use logic from features.py export_calendar but adapted for merged list
     import hashlib
-    
+
     if not output_file:
         output_file = str(Path.home() / "Downloads" / "unified_timeline.ics")
-    
+
     output_path = Path(output_file)
-    
+
     ics_lines = [
         "BEGIN:VCALENDAR",
         "VERSION:2.0",
@@ -157,16 +159,16 @@ def _export_timeline(events, output_file):
         "METHOD:PUBLISH",
         "X-WR-CALNAME:Uni Timeline",
     ]
-    
+
     for event in events:
         ts = event['timestamp']
         dt = datetime.fromtimestamp(ts, tz=timezone.utc)
         dtstart = dt.strftime('%Y%m%dT%H%M%SZ')
-        dtend = (dt.replace(minute=dt.minute + 60)).strftime('%Y%m%dT%H%M%SZ') # 1 hr duration dummy
-        
+        dtend = (dt.replace(minute=dt.minute + 60)).strftime('%Y%m%dT%H%M%SZ')  # 1 hr duration dummy
+
         uid_base = f"{event['name']}-{ts}"
         uid_hash = hashlib.md5(uid_base.encode()).hexdigest()[:16]
-        
+
         ics_lines.extend([
             "BEGIN:VEVENT",
             f"UID:timeline-{uid_hash}",
@@ -178,7 +180,7 @@ def _export_timeline(events, output_file):
         ])
 
     ics_lines.append("END:VCALENDAR")
-    
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text('\n'.join(ics_lines))
     rprint(f"[bold green]✓ Timeline exported to {output_path}[/bold green]")

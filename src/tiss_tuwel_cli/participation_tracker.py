@@ -9,7 +9,7 @@ called in future sessions.
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 # Data file for participation history
 PARTICIPATION_FILE = Path.home() / ".tu_companion" / "participation_history.json"
@@ -67,12 +67,12 @@ class ParticipationTracker:
             json.dump(data, f, indent=4)
 
     def record_participation(
-        self,
-        course_id: int,
-        course_name: str,
-        exercise_name: str,
-        was_called: bool,
-        date: Optional[str] = None
+            self,
+            course_id: int,
+            course_name: str,
+            exercise_name: str,
+            was_called: bool,
+            date: Optional[str] = None
     ) -> None:
         """
         Record a participation event for an exercise session.
@@ -86,24 +86,24 @@ class ParticipationTracker:
         """
         data = self._load_data()
         course_key = str(course_id)
-        
+
         if course_key not in data:
             data[course_key] = {
                 'course_name': course_name,
                 'group_size': 1,  # Default, can be updated
                 'sessions': []
             }
-        
+
         # Update course name in case it changed
         data[course_key]['course_name'] = course_name
-        
+
         session_date = date or datetime.now().strftime('%Y-%m-%d')
         data[course_key]['sessions'].append({
             'date': session_date,
             'exercise': exercise_name,
             'was_called': was_called
         })
-        
+
         self._save_data(data)
 
     def set_group_size(self, course_id: int, group_size: int) -> None:
@@ -116,7 +116,7 @@ class ParticipationTracker:
         """
         data = self._load_data()
         course_key = str(course_id)
-        
+
         if course_key in data:
             data[course_key]['group_size'] = group_size
             self._save_data(data)
@@ -165,37 +165,37 @@ class ParticipationTracker:
         course_data = self.get_course_data(course_id)
         if not course_data:
             return None
-        
+
         sessions = course_data.get('sessions', [])
         if not sessions:
             return None
-        
+
         group_size = course_data.get('group_size', 1)
         if group_size < 1:
             group_size = 1
-        
+
         total_sessions = len(sessions)
         times_called = sum(1 for s in sessions if s.get('was_called', False))
-        
+
         # Base probability (uniform random selection)
         base_prob = 1.0 / group_size
-        
+
         # Expected number of calls up to this point
         expected_calls = total_sessions / group_size
-        
+
         # Adjustment factor: if called less than expected, increase probability
         # if called more than expected, decrease probability
         if expected_calls > 0:
             adjustment = (expected_calls - times_called) / expected_calls
             # Clamp adjustment to reasonable range (-1 to 1)
             adjustment = max(-1, min(1, adjustment))
-            
+
             # Adjusted probability with bounds [0, 1]
             adjusted_prob = base_prob * (1 + adjustment * ADJUSTMENT_FACTOR)
             adjusted_prob = max(0.0, min(1.0, adjusted_prob))
         else:
             adjusted_prob = base_prob
-        
+
         return {
             'course_id': course_id,
             'course_name': course_data.get('course_name', f'Course {course_id}'),
@@ -220,7 +220,7 @@ class ParticipationTracker:
         """
         data = self._load_data()
         course_key = str(course_id)
-        
+
         if course_key in data:
             del data[course_key]
             self._save_data(data)

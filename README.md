@@ -39,6 +39,7 @@ source .venv/bin/activate
 
 # Install dependencies in editable mode
 pip install -e "."
+playwright install
 ```
 
 ## 🔐 Authentication (The Fun Part)
@@ -47,20 +48,23 @@ We need your TUWEL Web Service Token. You have two options:
 
 ### Option A: The "I trust code" way (Automated) 🤖
 
-Requires Chrome or Firefox. Launches a browser, lets you SSO login, and sniffs the token from the network traffic like a digital bloodhound.
-It uses a dedicated profile, so your session persists across runs!
+This is the recommended method. It uses Playwright to automate the login process in a headless browser.
+The first time you run it, you'll be asked for your credentials. You can choose to save them in a local config file (`~/.tu_companion/config.json`) for future automated logins.
+
+**Warning**: Credentials are stored in plain text.
+
+Your browser session (cookies, etc.) is stored in `~/.tu_companion/browser_data`, allowing for persistent sessions across runs.
 
 ```bash
 tiss-tuwel-cli login
 ```
 
 ### Option B: The "Paranoid" way (Manual) 🕵️
-
 If you prefer to dig through Developer Tools yourself or automated login fails.
-Run `setup`, follow the instructions to generate the `moodlemobile://` token URL, and paste it into the terminal.
+Run `login --manual`, follow the instructions to generate the `moodlemobile://` token URL, and paste it into the terminal.
 
 ```bash
-tiss-tuwel-cli setup
+tiss-tuwel-cli login --manual
 ```
 
 ## 🚀 Usage

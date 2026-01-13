@@ -215,8 +215,8 @@ def checkmarks():
             checkmarks_list = checkmarks_data.get('checkmarks', [])
             # Also fetch course list to get course names
             courses = client.get_enrolled_courses('inprogress')
-            course_names = {c.get('id'): c.get('fullname', f"Course {c.get('id')}") 
-                           for c in courses}
+            course_names = {c.get('id'): c.get('fullname', f"Course {c.get('id')}")
+                            for c in courses}
         except Exception as e:
             rprint(f"[bold red]Error fetching checkmarks:[/bold red] {e}")
             rprint("[dim]This may be due to a bug in the mod_checkmark plugin on TUWEL.[/dim]")
@@ -276,7 +276,7 @@ def checkmarks():
 
         # Get course name
         course_name = course_names.get(course_id, f'Course {course_id}')
-        
+
         # Summary header for the course - show course name prominently
         summary = f"[bold cyan]{course_name}[/bold cyan]\n"
         summary += f"[dim]ID: {course_id}[/dim] | "
@@ -396,10 +396,10 @@ def tiss_course(course_number: str, semester: str = "2025W"):
 
 
 def track_participation(
-    course_id: int,
-    exercise_name: str,
-    was_called: bool = False,
-    group_size: Optional[int] = None
+        course_id: int,
+        exercise_name: str,
+        was_called: bool = False,
+        group_size: Optional[int] = None
 ):
     """
     Track participation in an exercise session.
@@ -416,10 +416,10 @@ def track_participation(
     """
     from tiss_tuwel_cli.cli import get_tuwel_client
     from tiss_tuwel_cli.participation_tracker import ParticipationTracker
-    
+
     client = get_tuwel_client()
     tracker = ParticipationTracker()
-    
+
     # Get course name
     with console.status("[bold green]Fetching course info...[/bold green]"):
         courses = client.get_enrolled_courses('inprogress')
@@ -428,10 +428,10 @@ def track_participation(
             if course.get('id') == course_id:
                 course_name = course.get('fullname', f'Course {course_id}')
                 break
-        
+
         if not course_name:
             course_name = f'Course {course_id}'
-    
+
     # Record the participation
     tracker.record_participation(
         course_id=course_id,
@@ -439,11 +439,11 @@ def track_participation(
         exercise_name=exercise_name,
         was_called=was_called
     )
-    
+
     # Update group size if provided
     if group_size and group_size > 0:
         tracker.set_group_size(course_id, group_size)
-    
+
     # Show updated statistics
     stats = tracker.calculate_probability(course_id)
     if stats:
@@ -474,9 +474,9 @@ def participation_stats(course_id: Optional[int] = None):
                    shows stats for all tracked courses.
     """
     from tiss_tuwel_cli.participation_tracker import ParticipationTracker
-    
+
     tracker = ParticipationTracker()
-    
+
     if course_id:
         # Show detailed stats for one course
         stats = tracker.calculate_probability(course_id)
@@ -484,7 +484,7 @@ def participation_stats(course_id: Optional[int] = None):
             rprint(f"[yellow]No participation data found for course {course_id}.[/yellow]")
             rprint("[dim]Use 'track-participation' to start tracking.[/dim]")
             return
-        
+
         _display_detailed_stats(stats)
     else:
         # Show summary for all courses
@@ -493,17 +493,17 @@ def participation_stats(course_id: Optional[int] = None):
             rprint("[yellow]No participation data found.[/yellow]")
             rprint("[dim]Use 'track-participation' to start tracking your exercise sessions.[/dim]")
             return
-        
+
         rprint(Panel("[bold]Exercise Participation Overview[/bold]", expand=False))
         rprint()
-        
+
         table = Table(title="Call Probabilities", expand=True)
         table.add_column("Course", style="white", no_wrap=False)
         table.add_column("Sessions", justify="center", style="cyan")
         table.add_column("Called", justify="center", style="green")
         table.add_column("Group Size", justify="center", style="dim")
         table.add_column("Next Call Prob.", justify="right", style="yellow")
-        
+
         for cid, course_data in all_courses.items():
             stats = tracker.calculate_probability(cid)
             if stats:
@@ -515,7 +515,7 @@ def participation_stats(course_id: Optional[int] = None):
                     prob_style = "yellow"
                 else:
                     prob_style = "green"
-                
+
                 table.add_row(
                     stats['course_name'],
                     str(stats['total_sessions']),
@@ -523,7 +523,7 @@ def participation_stats(course_id: Optional[int] = None):
                     str(stats['group_size']),
                     f"[{prob_style}]{prob:.1f}%[/{prob_style}]"
                 )
-        
+
         console.print(table)
         rprint()
         rprint("[dim]💡 Tip: Use 'participation-stats --course-id <ID>' for detailed history.[/dim]")
@@ -537,20 +537,20 @@ def _display_detailed_stats(stats: Dict):
         title="📊 Participation Statistics"
     ))
     rprint()
-    
+
     # Summary metrics
     table = Table(show_header=False, box=None, expand=True)
     table.add_column("Metric", style="white")
     table.add_column("Value", style="cyan", justify="right")
-    
+
     table.add_row("Total sessions attended", str(stats['total_sessions']))
     table.add_row("Times called to present", str(stats['times_called']))
     table.add_row("Group size (average)", str(stats['group_size']))
     table.add_row("Expected calls (theoretical)", f"{stats['expected_calls']:.2f}")
-    
+
     console.print(table)
     rprint()
-    
+
     # Probability display
     prob = stats['adjusted_probability']
     if prob > 50:
@@ -562,14 +562,14 @@ def _display_detailed_stats(stats: Dict):
     else:
         prob_color = "green"
         prob_msg = "Low chance"
-    
+
     rprint(Panel(
         f"Base (uniform): [cyan]{stats['base_probability']:.1f}%[/cyan]\n"
         f"Adjusted (fair): [{prob_color}]{prob:.1f}%[/{prob_color}] - {prob_msg}",
         title="🎲 Probability of Being Called Next Time"
     ))
     rprint()
-    
+
     # Recent sessions
     if stats.get('sessions'):
         rprint("[bold]Recent Sessions:[/bold]")
@@ -578,7 +578,7 @@ def _display_detailed_stats(stats: Dict):
             called_mark = "[green]✓ Called[/green]" if session.get('was_called') else "[dim]○ Not called[/dim]"
             rprint(f"  {session.get('date', 'N/A')} - {session.get('exercise', 'N/A')} - {called_mark}")
         rprint()
-    
+
     rprint("[dim]💡 The adjusted probability accounts for fairness: if you've been called less")
     rprint("[dim]   than average, your probability increases slightly.[/dim]")
 
@@ -595,11 +595,11 @@ def open_vowi(course_title: str):
     """
     import webbrowser
     from tiss_tuwel_cli.utils import get_vowi_search_url
-    
+
     url = get_vowi_search_url(course_title)
     rprint(f"[cyan]Opening VoWi search for:[/cyan] {course_title}")
     rprint(f"[dim]URL: {url}[/dim]")
-    
+
     try:
         webbrowser.open(url)
         rprint("[green]✓ Opened in browser[/green]")

@@ -65,7 +65,7 @@ def dashboard():
     for event in events[:15]:  # Show more events
         event_time = event.get('timestart', 0)
         days_left = (event_time - now) / 86400
-        
+
         # Determine urgency indicator
         if days_left < 0:
             urgency = "[red]⚠️ Overdue[/red]"
@@ -82,11 +82,11 @@ def dashboard():
         else:
             urgency = "[dim]✓ OK[/dim]"
             date_style = "dim"
-        
+
         course_name = event.get('course', {}).get('shortname', 'Unknown')
         event_name = event.get('name', 'Unknown Event')
         date_str = timestamp_to_date(event_time)
-        
+
         tuwel_table.add_row(
             course_name,
             event_name,
@@ -103,7 +103,7 @@ def dashboard():
         # Get assignments for progress calculation
         assignments_data = client.get_assignments()
         total_assignments = 0
-        
+
         for course in assignments_data.get('courses', []):
             for assignment in course.get('assignments', []):
                 due = assignment.get('duedate', 0)
@@ -111,24 +111,24 @@ def dashboard():
                     total_assignments += 1
                     if due > now:
                         pending_assignments += 1
-        
+
         if total_assignments > 0:
             completed = total_assignments - pending_assignments
             completion_pct = (completed / total_assignments) * 100
-            
+
             # Create progress bar
             progress = Progress(
                 TextColumn("[bold blue]{task.description}"),
                 BarColumn(bar_width=40),
                 TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
             )
-            
+
             task = progress.add_task(
                 "Assignment Completion",
                 total=total_assignments,
                 completed=completed
             )
-            
+
             console.print(Panel(
                 progress,
                 title="📊 Study Progress",
@@ -156,17 +156,17 @@ def dashboard():
             )
         console.print(tiss_table)
         console.print()
-    
+
     # Quick tips panel
     tips = []
     if events:
         urgent_count = sum(1 for e in events if (e.get('timestart', 0) - now) < 86400)
         if urgent_count > 0:
             tips.append(f"🔥 You have {urgent_count} deadline(s) in the next 24 hours!")
-    
+
     if pending_assignments > 5:
         tips.append(f"📚 {pending_assignments} assignments pending - consider prioritizing!")
-    
+
     if tips:
         tip_text = "\n".join(tips)
         console.print(Panel(tip_text, title="💡 Quick Tips", border_style="yellow"))

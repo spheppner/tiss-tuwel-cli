@@ -28,13 +28,13 @@ tiss = TissClient()
 
 @app.callback()
 def main(
-    ctx: typer.Context,
-    interactive: bool = typer.Option(
-        False,
-        "--interactive",
-        "-i",
-        help="Start in interactive menu mode",
-    ),
+        ctx: typer.Context,
+        interactive: bool = typer.Option(
+            False,
+            "--interactive",
+            "-i",
+            help="Start in interactive menu mode",
+        ),
 ):
     """
     TU Wien Companion - TISS & TUWEL CLI.
@@ -66,7 +66,7 @@ def get_tuwel_client() -> TuwelClient:
     token = config.get_tuwel_token()
     if not token:
         rprint("[bold red]Error:[/bold red] TUWEL token not found. "
-               "Please run [green]setup[/green] or [green]login[/green] first.")
+               "Please run [green]login[/green] first.")
         raise typer.Exit()
     return TuwelClient(token)
 
@@ -74,9 +74,8 @@ def get_tuwel_client() -> TuwelClient:
 # Import and register command modules
 from tiss_tuwel_cli.cli import auth, courses, dashboard, features, timeline, todo
 
-# Register commands from submodules
+# Register commands
 app.command()(auth.login)
-app.command()(auth.setup)
 app.command()(dashboard.dashboard)
 app.command()(courses.courses)
 app.command()(courses.assignments)
@@ -89,7 +88,6 @@ app.command(name="participation-stats")(courses.participation_stats)
 app.command(name="open-vowi")(courses.open_vowi)
 
 # Register new feature commands
-# Register new feature commands
 app.command(name="export-calendar")(features.export_calendar)
 app.command(name="course-stats")(features.course_statistics)
 app.command(name="unified-view")(features.unified_course_view)
@@ -97,6 +95,5 @@ app.command(name="unified-view")(features.unified_course_view)
 # New commands
 app.command()(timeline.timeline)
 app.command()(todo.todo)
-
 
 __all__ = ["app", "console", "config", "tiss", "get_tuwel_client"]

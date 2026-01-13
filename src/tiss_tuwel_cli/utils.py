@@ -123,12 +123,12 @@ def parse_percentage(percent_str: str) -> Optional[float]:
     """
     if not percent_str or percent_str == '-':
         return None
-    
+
     # Remove % sign and spaces
     cleaned = percent_str.replace('%', '').strip()
     # Handle European comma decimal separator
     cleaned = cleaned.replace(',', '.')
-    
+
     try:
         return float(cleaned)
     except ValueError:
@@ -156,17 +156,17 @@ def extract_course_number(shortname: str) -> Optional[str]:
     """
     if not shortname:
         return None
-    
+
     # Pattern 1: Match XXX.XXX format
     match = re.search(r'(\d{3})\.(\d{3})', shortname)
     if match:
         return match.group(1) + match.group(2)
-    
+
     # Pattern 2: Match XXXXXX format (6 consecutive digits)
     match = re.search(r'\b(\d{6})\b', shortname)
     if match:
         return match.group(1)
-    
+
     return None
 
 
@@ -219,7 +219,7 @@ def days_until(date_str: str) -> Optional[int]:
     """
     if not date_str:
         return None
-    
+
     try:
         # Try parsing ISO date
         if 'T' in date_str:
@@ -227,7 +227,7 @@ def days_until(date_str: str) -> Optional[int]:
             target = target.replace(tzinfo=None)
         else:
             target = datetime.strptime(date_str[:10], '%Y-%m-%d')
-        
+
         now = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
         delta = target - now
         return delta.days
@@ -292,7 +292,7 @@ def get_tiss_course_url(course_number: str, semester: Optional[str] = None) -> s
     """
     # Remove dots from course number
     course_number = course_number.replace(".", "")
-    
+
     if semester:
         return f"https://tiss.tuwien.ac.at/course/courseDetails.xhtml?courseNr={course_number}&semester={semester}"
     else:

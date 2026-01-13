@@ -33,7 +33,7 @@ class ConfigManager:
     def __init__(self, config_dir: Optional[Path] = None, config_file: Optional[Path] = None):
         """
         Initialize the configuration manager.
-        
+
         Args:
             config_dir: Optional custom configuration directory path.
             config_file: Optional custom configuration file path.
@@ -52,7 +52,7 @@ class ConfigManager:
     def _load_config(self) -> Dict:
         """
         Load configuration from the JSON file.
-        
+
         Returns:
             Dictionary containing the configuration, or empty dict on error.
         """
@@ -112,4 +112,27 @@ class ConfigManager:
         """
         config = self._load_config()
         config["tuwel_userid"] = userid
+        self._save_config(config)
+
+    def get_login_credentials(self) -> tuple[Optional[str], Optional[str]]:
+        """
+        Get TUWEL login credentials from the config file.
+
+        Returns:
+            A tuple containing (username, password), or (None, None) if not set.
+        """
+        config = self._load_config()
+        return config.get("tuwel_user"), config.get("tuwel_pass")
+
+    def set_login_credentials(self, user: str, passw: str) -> None:
+        """
+        Save TUWEL login credentials to the config file.
+
+        Args:
+            user: The TUWEL username.
+            passw: The TUWEL password.
+        """
+        config = self._load_config()
+        config["tuwel_user"] = user
+        config["tuwel_pass"] = passw
         self._save_config(config)
