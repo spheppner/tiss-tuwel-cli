@@ -13,6 +13,11 @@ from typing import Any, Dict, List, Optional
 import requests
 
 
+class TissAPIError(Exception):
+    """Custom exception for TISS API errors."""
+    pass
+
+
 class TissClient:
     """
     Client for interacting with the TISS Public API.
@@ -50,7 +55,10 @@ class TissClient:
             params: Optional query parameters.
             
         Returns:
-            JSON response as a dictionary or list, or error dictionary on failure.
+            JSON response as a dictionary or list.
+
+        Raises:
+            TissAPIError: On API errors or parsing failures.
         """
         url = f"{self.BASE_URL}{endpoint}"
         try:
@@ -61,12 +69,12 @@ class TissClient:
 
             # Handle empty responses
             if not response.content or not response.text.strip():
-                return {"error": "Empty response from TISS API"}
+                raise TissAPIError("Empty response from TISS API")
 
             # Try JSON parsing
             try:
                 return response.json()
-            except ValueError:
+            except ValueError as json_e:
                 # Fallback: Try XML parsing
                 try:
                     import xml.etree.ElementTree as ET
@@ -125,10 +133,10 @@ class TissClient:
 
                     return result
                 except Exception as xml_e:
-                    # Return a clear error if both JSON and XML fail
-                    return {"error": f"Failed to parse TISS response. JSON error: {str(e)}. XML error: {str(xml_e)}"}
+                    # Raise a clear error if both JSON and XML fail
+                    raise TissAPIError(f"Failed to parse TISS response. JSON error: {str(json_e)}. XML error: {str(xml_e)}")
         except requests.RequestException as e:
-            return {"error": str(e)}
+            raise TissAPIError(str(e))
 
     def get_course_details(self, course_number: str, semester: str) -> Dict[str, Any]:
         """
@@ -140,8 +148,10 @@ class TissClient:
             
         Returns:
             Dictionary containing course details including title, ECTS, and type.
-            Returns {"error": "..."} on failure.
-        
+
+        Raises:
+            TissAPIError: On API errors.
+
         Example:
             >>> client = TissClient()
             >>> details = client.get_course_details("192.167", "2025W")
@@ -159,8 +169,10 @@ class TissClient:
             
         Returns:
             List of exam dictionaries containing date, mode, and registration info.
-            Returns {"error": "..."} on failure.
-        
+
+        Raises:
+            TissAPIError: On API errors.
+
         Example:
             >>> client = TissClient()
             >>> exams = client.get_exam_dates("192.167")
@@ -176,8 +188,10 @@ class TissClient:
         
         Returns:
             List of event dictionaries containing description and timing info.
-            Returns {"error": "..."} on failure.
-        
+
+        Raises:
+            TissAPIError: On API errors.
+
         Example:
             >>> client = TissClient()
             >>> events = client.get_public_events()

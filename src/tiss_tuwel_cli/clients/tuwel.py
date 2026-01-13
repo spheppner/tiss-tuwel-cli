@@ -14,6 +14,11 @@ from typing import Any, Dict, List, Optional
 import requests
 
 
+class TuwelAPIError(Exception):
+    """Custom exception for TUWEL API errors."""
+    pass
+
+
 class TuwelClient:
     """
     Client for interacting with the TUWEL (Moodle) Web Service.
@@ -59,7 +64,8 @@ class TuwelClient:
             JSON response from the API.
             
         Raises:
-            Exception: On network errors or Moodle API exceptions.
+            TuwelAPIError: On Moodle API exceptions.
+            requests.RequestException: On network errors.
         """
         if params is None:
             params = {}
@@ -91,11 +97,11 @@ class TuwelClient:
             data = response.json()
 
             if isinstance(data, dict) and "exception" in data:
-                raise Exception(f"TUWEL Error: {data.get('message')}")
+                raise TuwelAPIError(f"TUWEL Error: {data.get('message')}")
 
             return data
         except requests.RequestException as e:
-            raise Exception(f"Network Error: {str(e)}")
+            raise TuwelAPIError(f"Network Error: {str(e)}")
 
     def get_site_info(self) -> Dict[str, Any]:
         """
@@ -108,7 +114,7 @@ class TuwelClient:
             - sitename: The site name
             
         Example:
-            >>> client = TuwelClient(token)
+            >>> client = TuwelClient("your_token_here")
             >>> info = client.get_site_info()
             >>> print(f"Logged in as: {info['fullname']}")
         """
@@ -122,7 +128,7 @@ class TuwelClient:
             Dictionary containing 'events' list with upcoming calendar items.
             
         Example:
-            >>> client = TuwelClient(token)
+            >>> client = TuwelClient("your_token_here")
             >>> calendar = client.get_upcoming_calendar()
             >>> for event in calendar.get('events', []):
             ...     print(event['name'])
@@ -143,7 +149,7 @@ class TuwelClient:
             List of course dictionaries containing id, shortname, and fullname.
             
         Example:
-            >>> client = TuwelClient(token)
+            >>> client = TuwelClient("your_token_here")
             >>> courses = client.get_enrolled_courses('inprogress')
             >>> for course in courses:
             ...     print(f"{course['shortname']}: {course['fullname']}")
@@ -160,7 +166,7 @@ class TuwelClient:
             Dictionary containing 'courses' list, each with 'assignments' list.
             
         Example:
-            >>> client = TuwelClient(token)
+            >>> client = TuwelClient("your_token_here")
             >>> data = client.get_assignments()
             >>> for course in data.get('courses', []):
             ...     for assignment in course.get('assignments', []):
@@ -185,7 +191,7 @@ class TuwelClient:
             Dictionary containing 'tables' list with grade information.
             
         Example:
-            >>> client = TuwelClient(token)
+            >>> client = TuwelClient("your_token_here")
             >>> grades = client.get_user_grades_table(12345, 67890)
             >>> tables = grades.get('tables', [])
         """
@@ -207,7 +213,7 @@ class TuwelClient:
             Dictionary containing 'checkmarks' list with exercise status.
             
         Example:
-            >>> client = TuwelClient(token)
+            >>> client = TuwelClient("your_token_here")
             >>> data = client.get_checkmarks([])  # All courses
             >>> for cm in data.get('checkmarks', []):
             ...     print(cm['name'])
@@ -225,7 +231,7 @@ class TuwelClient:
             List of section dictionaries containing modules and resources.
             
         Example:
-            >>> client = TuwelClient(token)
+            >>> client = TuwelClient("your_token_here")
             >>> contents = client.get_course_contents(12345)
             >>> for section in contents:
             ...     for module in section.get('modules', []):
@@ -247,7 +253,7 @@ class TuwelClient:
             requests.HTTPError: On download failure.
             
         Example:
-            >>> client = TuwelClient(token)
+            >>> client = TuwelClient("your_token_here")
             >>> client.download_file(
             ...     "https://tuwel.tuwien.ac.at/pluginfile.php/...",
             ...     Path("./lecture.pdf")

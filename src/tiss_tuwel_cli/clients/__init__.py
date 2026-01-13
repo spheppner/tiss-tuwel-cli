@@ -1,11 +1,9 @@
 """
-API clients for TU Wien services.
-
-This package contains client implementations for interacting with
-TISS and TUWEL (Moodle) web services.
+API clients for TISS and TUWEL.
 """
 
-from tiss_tuwel_cli.clients.tiss import TissClient
-from tiss_tuwel_cli.clients.tuwel import TuwelClient
+from .tiss import TissClient
+from .tuwel import TuwelClient, TuwelAPIError
 
-__all__ = ["TissClient", "TuwelClient"]
+__all__ = ["TissClient", "TuwelClient", "TuwelAPIError"]
+

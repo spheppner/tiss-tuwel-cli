@@ -9,22 +9,16 @@ Example usage:
     $ tiss-tuwel-cli login
     
     # View upcoming deadlines
-    $ tiss-tuwel-cli dashboard
-    
-    # List enrolled courses
-    $ tiss-tuwel-cli courses
+    $ tiss-tuwel-cli timeline
 """
 
-__version__ = "0.1.0"
-__author__ = "TU Wien Companion Contributors"
-
-from tiss_tuwel_cli.clients.tiss import TissClient
-from tiss_tuwel_cli.clients.tuwel import TuwelClient
-from tiss_tuwel_cli.config import ConfigManager
+from .clients.tiss import TissClient
+from .clients.tuwel import TuwelClient, TuwelAPIError
+from .config import ConfigManager
 
 __all__ = [
-    "ConfigManager",
     "TissClient",
     "TuwelClient",
-    "__version__",
+    "TuwelAPIError",
+    "ConfigManager",
 ]
