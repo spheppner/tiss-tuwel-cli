@@ -7,7 +7,7 @@ grades, checkmarks, and downloading course materials.
 
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from rich import print as rprint
 from rich.console import Console
@@ -15,7 +15,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from tiss_tuwel_cli.clients.tiss import TissClient
-from tiss_tuwel_cli.utils import strip_html, timestamp_to_date
+from tiss_tuwel_cli.utils import parse_percentage, strip_html, timestamp_to_date
 
 console = Console()
 tiss = TissClient()
@@ -157,12 +157,14 @@ def grades(course_id: Optional[int] = None):
                 f"[bold yellow]{percent_val}[/bold yellow]"
             )
         elif grade_val != '-' and grade_val.strip():
-            # Regular grade item
+            # Regular grade item - use numeric comparison for styling
             style = ""
-            if "0,00" in percent_val or "0.00" in percent_val:
-                style = "red"
-            elif "100" in percent_val:
-                style = "green"
+            pct = parse_percentage(percent_val)
+            if pct is not None:
+                if pct == 0.0:
+                    style = "red"
+                elif pct >= 100.0:
+                    style = "green"
 
             if style:
                 table.add_row(
@@ -214,7 +216,7 @@ def checkmarks():
         return
 
     # Group checkmarks by course
-    courses_data = {}
+    courses_data: Dict[int, Dict[str, Any]] = {}
     for cm in checkmarks_list:
         course_id = cm.get('course')
         if course_id not in courses_data:

@@ -5,9 +5,11 @@ This module provides an interactive, menu-based interface for using
 all CLI features in a user-friendly way with keyboard navigation.
 """
 
+import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+import requests
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 from InquirerPy.separator import Separator
@@ -17,7 +19,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from tiss_tuwel_cli.config import ConfigManager
-from tiss_tuwel_cli.utils import strip_html, timestamp_to_date
+from tiss_tuwel_cli.utils import parse_percentage, strip_html, timestamp_to_date
 
 console = Console()
 config = ConfigManager()
@@ -58,8 +60,9 @@ class InteractiveMenu:
             if client:
                 try:
                     self._user_info = client.get_site_info()
-                except Exception:
-                    pass
+                except (Exception, KeyboardInterrupt):
+                    # Authentication errors are handled gracefully in the UI
+                    self._user_info = None
         return self._user_info
 
     def _clear_screen(self):
@@ -122,12 +125,13 @@ class InteractiveMenu:
 
                     console.print(f"  {urgency}[{style}]{time}[/{style}] [{style}]{course}[/{style}] - {name}")
                 console.print()
-        except Exception:
+        except (requests.RequestException, KeyError, TypeError):
+            # Network or parsing errors are handled gracefully - dashboard is optional
             pass
 
     def _wait_for_continue(self):
         """Wait for user to continue."""
-        inquirer.confirm(message="Press Enter to continue...", default=True).execute()
+        inquirer.text(message="Press Enter to continue...", default="").execute()
 
     def _get_courses(self, classification: str = 'inprogress') -> List[dict]:
         """Fetch and cache courses."""
@@ -440,12 +444,14 @@ class InteractiveMenu:
                     f"[bold yellow]{percent_val}[/bold yellow]"
                 )
             elif grade_val != '-' and grade_val.strip():
-                # Regular grade item
+                # Regular grade item - use numeric comparison for styling
                 style = ""
-                if "0,00" in percent_val or "0.00" in percent_val:
-                    style = "red"
-                elif "100" in percent_val:
-                    style = "green"
+                pct = parse_percentage(percent_val)
+                if pct is not None:
+                    if pct == 0.0:
+                        style = "red"
+                    elif pct >= 100.0:
+                        style = "green"
 
                 if style:
                     table.add_row(
@@ -513,7 +519,7 @@ class InteractiveMenu:
                         if days_left < 1:
                             status = "[bold red]Due Soon![/bold red]"
                         elif days_left < 3:
-                            status = "[yellow]Due in {:.0f}d[/yellow]".format(days_left)
+                            status = f"[yellow]Due in {days_left:.0f}d[/yellow]"
                         else:
                             status = "[green]Open[/green]"
 
@@ -672,9 +678,18 @@ class InteractiveMenu:
         self._clear_screen()
         self._print_header("TISS Course Search")
 
+        def validate_course_number(text: str) -> bool:
+            """Validate TISS course number format (e.g., 192.167 or 192167)."""
+            if not text:
+                return False
+            # Accept formats like "192.167", "192167", etc.
+            pattern = r'^\d{3}\.?\d{3}$'
+            return bool(re.match(pattern, text.strip()))
+
         course_number = inquirer.text(
             message="Course number (e.g., 192.167):",
-            validate=lambda x: len(x) > 0,
+            validate=validate_course_number,
+            invalid_message="Please enter a valid course number (e.g., 192.167)",
         ).execute()
 
         if not course_number:
