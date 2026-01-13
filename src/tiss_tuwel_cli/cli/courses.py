@@ -66,7 +66,7 @@ def assignments():
     client = get_tuwel_client()
     with console.status("[bold green]Fetching assignments...[/bold green]"):
         data = client.get_assignments()
-        enrolled_courses = data.get('courses', [])
+        courses_with_assignments = data.get('courses', [])
 
     table = Table(title="Assignments")
     table.add_column("Course", style="cyan")
@@ -75,7 +75,7 @@ def assignments():
     table.add_column("Status", style="yellow")
 
     now = datetime.now().timestamp()
-    for course in enrolled_courses:
+    for course in courses_with_assignments:
         for assign in course.get('assignments', []):
             due = assign.get('duedate', 0)
             if due < now - (30 * 86400):
