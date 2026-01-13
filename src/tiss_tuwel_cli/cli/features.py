@@ -9,8 +9,9 @@ This module provides advanced features that enhance the CLI experience:
 - Course workload comparison
 """
 
+import hashlib
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -20,6 +21,11 @@ from rich.panel import Panel
 from rich.table import Table
 
 console = Console()
+
+# Study time estimation constants (in hours)
+HOURS_PER_ASSIGNMENT = 3.0
+HOURS_PER_CHECKMARK = 0.5
+HOURS_PER_EVENT_PREP = 1.0
 
 
 def export_calendar(output_file: Optional[str] = None):
@@ -71,20 +77,24 @@ def export_calendar(output_file: Optional[str] = None):
         # Convert timestamp to datetime
         start_time = event.get('timestart', 0)
         if start_time:
-            dt = datetime.fromtimestamp(start_time)
+            # Convert to UTC for proper ICS format
+            dt = datetime.fromtimestamp(start_time, tz=timezone.utc)
             
-            # Format for ICS (UTC)
-            dtstart = dt.strftime('%Y%m%dT%H%M%S')
-            dtend = (dt + timedelta(hours=1)).strftime('%Y%m%dT%H%M%S')
+            # Format for ICS (UTC with Z suffix)
+            dtstart = dt.strftime('%Y%m%dT%H%M%SZ')
+            dtend = (dt + timedelta(hours=1)).strftime('%Y%m%dT%H%M%SZ')
             
-            # Generate unique ID
-            uid = f"tuwel-{event.get('id', hash(event_name))}-{start_time}@tuwel.tuwien.ac.at"
+            # Generate stable unique ID using event properties
+            event_id = event.get('id', 0)
+            uid_base = f"{event_id}-{start_time}-{event_name}"
+            uid_hash = hashlib.md5(uid_base.encode()).hexdigest()[:16]
+            uid = f"tuwel-{uid_hash}@tuwel.tuwien.ac.at"
             
             # Add event
             ics_lines.extend([
                 "BEGIN:VEVENT",
                 f"UID:{uid}",
-                f"DTSTAMP:{datetime.now().strftime('%Y%m%dT%H%M%SZ')}",
+                f"DTSTAMP:{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}",
                 f"DTSTART:{dtstart}",
                 f"DTEND:{dtend}",
                 f"SUMMARY:{event_name}",
@@ -325,10 +335,10 @@ def estimate_study_time():
         if now < e.get('timestart', 0) <= week_later
     ]
     
-    # Estimate time (rough heuristics)
-    assignment_time = len(assignments_this_week) * 3  # 3 hours per assignment
-    checkmark_time = sum(cm['unchecked'] * 0.5 for cm in incomplete_checkmarks)  # 30 min per checkmark
-    event_prep_time = len(events_this_week) * 1  # 1 hour prep per event
+    # Estimate time using configured constants
+    assignment_time = len(assignments_this_week) * HOURS_PER_ASSIGNMENT
+    checkmark_time = sum(cm['unchecked'] * HOURS_PER_CHECKMARK for cm in incomplete_checkmarks)
+    event_prep_time = len(events_this_week) * HOURS_PER_EVENT_PREP
     
     total_estimated = assignment_time + checkmark_time + event_prep_time
     

@@ -14,6 +14,9 @@ from typing import Dict, List, Optional
 # Data file for participation history
 PARTICIPATION_FILE = Path.home() / ".tu_companion" / "participation_history.json"
 
+# Probability calculation constants
+ADJUSTMENT_FACTOR = 0.5  # Factor for adjusting probability based on fairness (0.0 to 1.0)
+
 
 class ParticipationTracker:
     """
@@ -188,7 +191,7 @@ class ParticipationTracker:
             adjustment = max(-1, min(1, adjustment))
             
             # Adjusted probability with bounds [0, 1]
-            adjusted_prob = base_prob * (1 + adjustment * 0.5)
+            adjusted_prob = base_prob * (1 + adjustment * ADJUSTMENT_FACTOR)
             adjusted_prob = max(0.0, min(1.0, adjusted_prob))
         else:
             adjusted_prob = base_prob
