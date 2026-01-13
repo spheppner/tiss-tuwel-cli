@@ -64,9 +64,36 @@ pip install -e "."
 
 ## Usage
 
-### Interactive Mode
+### Shell Mode (Default)
 
-For a user-friendly menu-based experience, start the CLI in interactive mode:
+Run `tiss-tuwel-cli` without arguments to start an interactive shell:
+
+```bash
+tiss-tuwel-cli
+```
+
+**Features of Shell Mode:**
+- **Interactive Prompt** - Command-line shell with a clean ">" prompt
+- **Command History** - Use ↑↓ arrow keys to navigate through previous commands
+- **Tab Completion** - Press Tab to autocomplete commands
+- **Help System** - Type `help` to see all available commands
+- **All Commands Supported** - Run any CLI command directly in the shell
+- **Easy Exit** - Type `exit` or `quit` to leave the shell (or use Ctrl+D)
+- **Switch Modes** - Type `interactive` to switch to the menu-based interface
+
+**Example Session:**
+```bash
+$ tiss-tuwel-cli
+> help              # Shows all available commands
+> dashboard         # View your dashboard
+> courses           # List your courses
+> interactive       # Switch to menu mode
+> exit              # Leave the shell
+```
+
+### Interactive Menu Mode
+
+For a user-friendly menu-based experience with keyboard navigation:
 
 ```bash
 tiss-tuwel-cli -i
@@ -186,10 +213,28 @@ tiss-tuwel-cli submission-tracker
 
 ```bash
 # Using the package module
-python -m tiss_tuwel_cli dashboard
+python -m tiss_tuwel_cli               # Starts shell mode
+python -m tiss_tuwel_cli dashboard     # Run specific command
 
 # Using the alias
-tu-companion dashboard
+tu-companion                           # Starts shell mode
+tu-companion dashboard                 # Run specific command
+tu-companion -i                        # Start menu mode
+```
+
+### Getting Help
+
+```bash
+# Show help for the CLI
+tiss-tuwel-cli --help
+
+# In shell mode, type:
+> help
+
+# Get help for specific commands
+tiss-tuwel-cli courses --help
+# or in shell:
+> courses --help
 ```
 
 ## Project Structure
@@ -213,7 +258,8 @@ tiss-tuwel-cli/
 │           ├── dashboard.py           # Dashboard command
 │           ├── courses.py             # Course-related commands
 │           ├── features.py            # Advanced feature commands
-│           └── interactive.py         # Interactive menu mode
+│           ├── interactive.py         # Interactive menu mode
+│           └── shell.py               # Interactive shell mode
 ├── pyproject.toml                     # Project configuration & dependencies
 └── README.md
 ```
@@ -229,6 +275,7 @@ Configuration is stored in `~/.tu_companion/` and includes:
 - **requests** - HTTP client for API requests
 - **typer** - CLI framework
 - **rich** - Terminal formatting and output
+- **prompt_toolkit** - Advanced shell features (history, completion)
 - **InquirerPy** - Interactive prompts and menus
 - **selenium** - Browser automation for login
 
