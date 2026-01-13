@@ -35,6 +35,8 @@ SHELL_COMMANDS = {
     "open-vowi": "Open VoWi search",
     "export-calendar": "Export calendar to ICS",
     "course-stats": "Show course statistics",
+    "timeline": "Show unified timeline",
+    "todo": "Show urgent tasks",
     "unified-view": "Show unified TISS+TUWEL view",
     "interactive": "Start interactive menu mode",
 }

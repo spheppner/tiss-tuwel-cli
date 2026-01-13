@@ -516,6 +516,8 @@ class InteractiveMenu:
                     Choice(value="participation", name="🎯 Exercise Participation"),
                     Choice(value="grades", name="🏆 Grade Summary"),
                     Separator("─── Advanced Features ───"),
+                    Choice(value="timeline", name="📅 Unified Timeline"),
+                    Choice(value="todo", name="⚡ Urgent Tasks (Todo)"),
                     Choice(value="export_cal", name="📅 Export Calendar"),
                     Separator(),
                     Choice(value="tiss", name="🔍 Search TISS"),
@@ -560,6 +562,10 @@ class InteractiveMenu:
                 self._show_participation_menu()
             elif action == "grades":
                 self._show_grade_summary()
+            elif action == "timeline":
+                self._show_timeline()
+            elif action == "todo":
+                self._show_todo()
             elif action == "export_cal":
                 self._export_calendar()
             elif action == "tiss":
@@ -1574,16 +1580,31 @@ class InteractiveMenu:
         
         self._wait_for_continue()
 
+    def _show_timeline(self):
+        """Show unified timeline."""
+        self._clear_screen()
+        from tiss_tuwel_cli.cli.timeline import timeline
+        timeline(export=False)
+        self._wait_for_continue()
+
+    def _show_todo(self):
+        """Show urgent tasks."""
+        self._clear_screen()
+        from tiss_tuwel_cli.cli.todo import todo
+        todo()
+        self._wait_for_continue()
+
     def _export_calendar(self):
         """Export calendar to ICS."""
         self._clear_screen()
         self._print_header("Export Calendar")
         
-        from tiss_tuwel_cli.cli.features import export_calendar
+        # Use simple timeline export now
+        from tiss_tuwel_cli.cli.timeline import timeline
         try:
-            export_calendar()
+            timeline(export=True)
         except Exception as e:
-            rprint(f"[red]Error: {e}[/red]")
+            rprint(f"[red]Export failed: {e}[/red]")
         
         self._wait_for_continue()
 

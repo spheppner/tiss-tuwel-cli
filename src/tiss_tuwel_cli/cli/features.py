@@ -9,10 +9,8 @@ This module provides advanced features that enhance the CLI experience:
 - Course workload comparison
 """
 
-import hashlib
 import json
-from datetime import datetime, timedelta, timezone
-from pathlib import Path
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from rich import print as rprint
@@ -30,88 +28,16 @@ def export_calendar(output_file: Optional[str] = None):
     """
     Export upcoming deadlines to ICS calendar format.
     
-    Creates an ICS file that can be imported into calendar applications
-    like Google Calendar, Apple Calendar, or Outlook.
+    Creates an ICS file that can be imported into calendar applications.
+    Now uses the unified timeline (TISS + TUWEL).
     
     Args:
-        output_file: Optional path for the output file. Defaults to
-                    ~/Downloads/tuwel_calendar.ics
+        output_file: Optional path for the output file.
     """
-    from tiss_tuwel_cli.cli import get_tuwel_client
+    from tiss_tuwel_cli.cli.timeline import timeline
     
-    client = get_tuwel_client()
-    
-    with console.status("[bold green]Fetching calendar events...[/bold green]"):
-        upcoming = client.get_upcoming_calendar()
-        events = upcoming.get('events', [])
-    
-    if not events:
-        rprint("[yellow]No upcoming events found to export.[/yellow]")
-        return
-    
-    # Default output path
-    if not output_file:
-        output_file = str(Path.home() / "Downloads" / "tuwel_calendar.ics")
-    
-    output_path = Path(output_file)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    
-    # Generate ICS content
-    ics_lines = [
-        "BEGIN:VCALENDAR",
-        "VERSION:2.0",
-        "PRODID:-//TU Wien Companion//TUWEL Calendar Export//EN",
-        "CALSCALE:GREGORIAN",
-        "METHOD:PUBLISH",
-        "X-WR-CALNAME:TUWEL Deadlines",
-        "X-WR-TIMEZONE:Europe/Vienna",
-    ]
-    
-    for event in events:
-        event_name = event.get('name', 'Unknown Event')
-        course = event.get('course', {})
-        course_name = course.get('fullname', course.get('shortname', ''))
-        
-        # Convert timestamp to datetime
-        start_time = event.get('timestart', 0)
-        if start_time:
-            # Convert to UTC for proper ICS format
-            dt = datetime.fromtimestamp(start_time, tz=timezone.utc)
-            
-            # Format for ICS (UTC with Z suffix)
-            dtstart = dt.strftime('%Y%m%dT%H%M%SZ')
-            dtend = (dt + timedelta(hours=1)).strftime('%Y%m%dT%H%M%SZ')
-            
-            # Generate stable unique ID using event properties
-            event_id = event.get('id', 0)
-            uid_base = f"{event_id}-{start_time}-{event_name}"
-            uid_hash = hashlib.md5(uid_base.encode()).hexdigest()[:16]
-            uid = f"tuwel-{uid_hash}@tuwel.tuwien.ac.at"
-            
-            # Add event
-            ics_lines.extend([
-                "BEGIN:VEVENT",
-                f"UID:{uid}",
-                f"DTSTAMP:{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}",
-                f"DTSTART:{dtstart}",
-                f"DTEND:{dtend}",
-                f"SUMMARY:{event_name}",
-                f"DESCRIPTION:Course: {course_name}",
-                f"LOCATION:TUWEL",
-                "STATUS:CONFIRMED",
-                "END:VEVENT",
-            ])
-    
-    ics_lines.append("END:VCALENDAR")
-    
-    # Write to file
-    output_path.write_text('\n'.join(ics_lines))
-    
-    rprint(f"[bold green]✓ Calendar exported![/bold green]")
-    rprint(f"[cyan]Location:[/cyan] {output_path}")
-    rprint(f"[dim]Exported {len(events)} events[/dim]")
-    rprint()
-    rprint("[dim]💡 Import this file into Google Calendar, Apple Calendar, or Outlook.[/dim]")
+    # Delegate to unified timeline export
+    timeline(export=True, output=output_file)
 
 
 def course_statistics(course_id: Optional[int] = None):
