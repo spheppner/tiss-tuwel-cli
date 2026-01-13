@@ -53,22 +53,60 @@ def main(
         raise typer.Exit()
 
 
-def get_tuwel_client() -> TuwelClient:
+def get_tuwel_client(force_new_token: bool = False) -> TuwelClient:
     """
-    Get an authenticated TUWEL client.
+    Get an authenticated TUWEL client, automatically handling token validation and refresh.
+
+    Args:
+        force_new_token: If True, will force a new token to be fetched even if a valid one exists.
 
     Returns:
         An authenticated TuwelClient instance.
 
     Raises:
-        typer.Exit: If no TUWEL token is configured.
+        typer.Exit: If no token can be obtained.
     """
     token = config.get_tuwel_token()
-    if not token:
-        rprint("[bold red]Error:[/bold red] TUWEL token not found. "
-               "Please run [green]login[/green] first.")
-        raise typer.Exit()
-    return TuwelClient(token)
+
+    # 1. If no token, try to log in
+    if not token or force_new_token:
+        user, _ = config.get_login_credentials()
+        if user:
+            rprint("[yellow]No valid token found. Attempting automatic re-login...[/yellow]")
+            from tiss_tuwel_cli.cli.auth import _run_playwright_login_internal
+            success = _run_playwright_login_internal(user, _, False) # silent=True -> debug=False
+            if success:
+                token = config.get_tuwel_token()
+            else:
+                rprint("[bold red]Error:[/bold red] Automatic login failed. Please run [green]tiss-tuwel-cli login[/green] manually.")
+                raise typer.Exit()
+        else:
+            rprint("[bold red]Error:[/bold red] TUWEL token not found. Please run [green]tiss-tuwel-cli login[/green] first.")
+            raise typer.Exit()
+
+    client = TuwelClient(token)
+
+    # 2. Validate existing token
+    try:
+        client.get_site_info()
+    except Exception:
+        # If validation fails, try to get a new token
+        user, _ = config.get_login_credentials()
+        if user:
+            rprint("[yellow]Token is invalid or expired. Attempting automatic re-login...[/yellow]")
+            from tiss_tuwel_cli.cli.auth import _run_playwright_login_internal
+            success = _run_playwright_login_internal(user, _, False) # silent=True -> debug=False
+            if success:
+                new_token = config.get_tuwel_token()
+                return TuwelClient(new_token)
+            else:
+                rprint("[bold red]Error:[/bold red] Automatic login failed. Please run [green]tiss-tuwel-cli login[/green] manually.")
+                raise typer.Exit()
+        else:
+            rprint("[bold red]Error:[/bold red] Your TUWEL token is invalid. Please run [green]tiss-tuwel-cli login[/green] again.")
+            raise typer.Exit()
+
+    return client
 
 
 # Import and register command modules

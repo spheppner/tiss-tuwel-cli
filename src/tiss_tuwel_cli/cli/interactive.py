@@ -17,21 +17,13 @@ from InquirerPy.separator import Separator
 from rich import print as rprint
 from rich.console import Console
 from rich.panel import Panel
-from rich.table import Table
+from rich.prompt import Prompt
 
-from tiss_tuwel_cli.clients.tiss import TissClient
+from tiss_tuwel_cli.cli import courses, dashboard, features, get_tuwel_client, timeline, todo
 from tiss_tuwel_cli.config import ConfigManager
-from tiss_tuwel_cli.utils import (
-    days_until,
-    extract_course_number,
-    parse_percentage,
-    strip_html,
-    timestamp_to_date,
-)
 
 console = Console()
 config = ConfigManager()
-tiss = TissClient()
 
 # Constants for time calculations and thresholds
 SECONDS_PER_DAY = 86400
@@ -1733,16 +1725,79 @@ class InteractiveMenu:
 
 def interactive():
     """
-    Start interactive mode.
-    
-    Launches a user-friendly menu-based interface with keyboard navigation
-    for interacting with all CLI features. Navigate through your courses,
-    view grades, assignments, and more using arrow keys.
+    Launch the interactive menu-driven mode.
     """
-    menu = InteractiveMenu()
+    console.print(Panel("[bold blue]TU Wien Companion[/bold blue]\n[dim]Interactive Mode[/dim]", expand=False))
+
     try:
-        menu.show_main_menu()
-    except KeyboardInterrupt:
-        rprint("\n[bold green]Goodbye![/bold green]")
+        client = get_tuwel_client()
+        info = client.get_site_info()
+        console.print(f"\nWelcome back, {info.get('fullname')}\n")
+        # Display initial dashboard view
+        dashboard.dashboard()
+
     except Exception as e:
-        rprint(f"\n[red]Error: {e}[/red]")
+        console.print(f"\n[bold red]Error:[/bold red] {e}")
+        return
+
+    while True:
+        choices = [
+            Choice(value="courses", name="📚 My Courses"),
+            Choice(value="unified", name="🔗 Unified Course View (TISS+TUWEL)"),
+            Choice(value="dashboard", name="📊 Dashboard"),
+            Choice(value="exams", name="🎓 Exam Registration"),
+            Choice(value="weekly", name="📆 This Week"),
+            Choice(value="assignments", name="📝 Assignments"),
+            Choice(value="checkmarks", name="✅ Kreuzerlübungen"),
+            Choice(value="participation", name="🎯 Exercise Participation"),
+            Choice(value="grades", name="🏆 Grade Summary"),
+            Separator("─── Advanced Features ───"),
+            Choice(value="timeline", name="📅 Unified Timeline"),
+            Choice(value="todo", name="⚡ Urgent Tasks (Todo)"),
+            Choice(value="export_cal", name="📅 Export Calendar"),
+            Separator(),
+            Choice(value="tiss", name="🔍 Search TISS"),
+            Separator(),
+            Choice(value="login", name="🔐 Login"),
+            Choice(value="quit", name="🚪 Quit"),
+        ]
+
+        action = inquirer.select(
+            message="Select an option:",
+            choices=choices,
+            pointer="→",
+            qmark="",
+            amark="",
+        ).execute()
+
+        if action == "quit":
+            console.print("[bold green]Goodbye![/bold green]")
+            break
+        elif action == "login":
+            InteractiveMenu()._show_login_menu()
+        elif action == "unified":
+            InteractiveMenu()._show_unified_view()
+        elif action == "courses":
+            InteractiveMenu()._show_courses_menu()
+        elif action == "dashboard":
+            InteractiveMenu()._show_dashboard()
+        elif action == "exams":
+            InteractiveMenu()._show_exam_registration()
+        elif action == "weekly":
+            InteractiveMenu()._show_weekly_overview()
+        elif action == "assignments":
+            InteractiveMenu()._show_assignments()
+        elif action == "checkmarks":
+            InteractiveMenu()._show_checkmarks()
+        elif action == "participation":
+            InteractiveMenu()._show_participation_menu()
+        elif action == "grades":
+            InteractiveMenu()._show_grade_summary()
+        elif action == "timeline":
+            InteractiveMenu()._show_timeline()
+        elif action == "todo":
+            InteractiveMenu()._show_todo()
+        elif action == "export_cal":
+            InteractiveMenu()._export_calendar()
+        elif action == "tiss":
+            InteractiveMenu()._show_tiss_search()

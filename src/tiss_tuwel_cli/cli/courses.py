@@ -103,7 +103,7 @@ def grades(course_id: Optional[int] = None):
     If no course ID is provided, lists enrolled courses first.
     
     Args:
-        course_id: The Moodle course ID to show grades for.
+        course_id: The TUWEL course ID to show grades for.
     """
     # Import here to avoid circular imports
     from tiss_tuwel_cli.cli import config, get_tuwel_client
@@ -321,7 +321,7 @@ def download(course_id: int):
     Files are saved to ~/Downloads/Tuwel/<Course_ID>/
     
     Args:
-        course_id: The Moodle course ID to download files from.
+        course_id: The TUWEL course ID to download files from.
     """
     # Import here to avoid circular imports
     from tiss_tuwel_cli.cli import get_tuwel_client
@@ -409,7 +409,7 @@ def track_participation(
     for future sessions.
     
     Args:
-        course_id: The Moodle course ID.
+        course_id: The TUWEL course ID.
         exercise_name: Name/number of the exercise (e.g., "Exercise 3").
         was_called: True if you were called to present, False otherwise.
         group_size: Optional average group size for probability calculations.

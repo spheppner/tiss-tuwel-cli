@@ -250,12 +250,22 @@ def get_vowi_search_url(course_title: str) -> str:
     
     Example:
         >>> get_vowi_search_url("Algorithmen und Datenstrukturen")
-        'https://vowi.fsinf.at/wiki/Spezial:Suche?search=Algorithmen+und+Datenstrukturen'
+        'https://vowi.fsinf.at/index.php?search=Algorithmen+und+Datenstrukturen&title=Spezial%3ASuche&go=Seite'
     """
-    # VoWi is a MediaWiki instance, use the Special:Search page (Spezial:Suche in German)
-    base_url = "https://vowi.fsinf.at/wiki/Spezial:Suche"
-    encoded_title = urllib.parse.quote_plus(course_title)
-    return f"{base_url}?search={encoded_title}"
+    # Clean the title to get better search results
+    # e.g., "104.633 Algebra... VU 2025W" -> "Algebra..."
+    search_query = re.sub(r'^\d{3}\.\d{3}\s*', '', course_title)
+    search_query = re.sub(r'\s*\([^)]+\)\s*\d{4}[WS]\s*$', '', search_query)
+    search_query = re.sub(r'\s*\d{4}[WS]\s*$', '', search_query)
+    search_query = search_query.strip()
+
+    base_url = "https://vowi.fsinf.at/index.php"
+    params = {
+        "search": search_query or course_title,  # Fallback to original title
+        "title": "Spezial:Suche",
+        "go": "Seite"
+    }
+    return f"{base_url}?{urllib.parse.urlencode(params)}"
 
 
 def get_tuwel_course_url(course_id: int) -> str:
@@ -263,7 +273,7 @@ def get_tuwel_course_url(course_id: int) -> str:
     Generate a direct TUWEL course URL.
     
     Args:
-        course_id: The TUWEL/Moodle course ID.
+        course_id: The TUWEL course ID.
         
     Returns:
         URL to the course page on TUWEL.

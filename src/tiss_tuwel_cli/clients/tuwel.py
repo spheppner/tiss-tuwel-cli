@@ -64,20 +64,34 @@ class TuwelClient:
         if params is None:
             params = {}
 
+        # Moodle expects lists as indexed arrays. The `key[]=value` format is the most
+        # reliable way for PHP to interpret this from form data.
+        scalar_params = {}
+        list_params = []
+        for key, value in params.items():
+            if isinstance(value, list):
+                for item in value:
+                    list_params.append((f"{key}[]", item))
+            else:
+                scalar_params[key] = value
+
         payload = {
             "wstoken": self.token,
             "wsfunction": wsfunction,
             "moodlewsrestformat": "json",
         }
-        payload.update(params)
+        payload.update(scalar_params)
+
+        # Combine the dict payload with the list of tuples for requests to handle
+        final_payload = list(payload.items()) + list_params
 
         try:
-            response = requests.post(self.BASE_URL, data=payload, timeout=self.timeout)
+            response = requests.post(self.BASE_URL, data=final_payload, timeout=self.timeout)
             response.raise_for_status()
             data = response.json()
 
             if isinstance(data, dict) and "exception" in data:
-                raise Exception(f"Moodle Error: {data.get('message')}")
+                raise Exception(f"TUWEL Error: {data.get('message')}")
 
             return data
         except requests.RequestException as e:
@@ -156,20 +170,16 @@ class TuwelClient:
         if not courses:
             return {"courses": []}
 
-        # Build courseids[0]=123, courseids[1]=456...
-        params = {}
-        for i, cid in enumerate([c['id'] for c in courses]):
-            params[f"courseids[{i}]"] = cid
-
-        return self._call("mod_assign_get_assignments", params)
+        course_ids = [c['id'] for c in courses]
+        return self._call("mod_assign_get_assignments", {"courseids": course_ids})
 
     def get_user_grades_table(self, course_id: int, user_id: int) -> Dict[str, Any]:
         """
         Fetch the grade report table structure for a course.
         
         Args:
-            course_id: The Moodle course ID.
-            user_id: The Moodle user ID.
+            course_id: The TUWEL course ID.
+            user_id: The TUWEL user ID.
             
         Returns:
             Dictionary containing 'tables' list with grade information.
@@ -202,15 +212,14 @@ class TuwelClient:
             >>> for cm in data.get('checkmarks', []):
             ...     print(cm['name'])
         """
-        params = {"courseids": course_ids}
-        return self._call("mod_checkmark_get_checkmarks_by_courses", params)
+        return self._call("mod_checkmark_get_checkmarks_by_courses", {"courseids": course_ids})
 
     def get_course_contents(self, course_id: int) -> List[Dict[str, Any]]:
         """
         Fetch the contents/resources of a course.
         
         Args:
-            course_id: The Moodle course ID.
+            course_id: The TUWEL course ID.
             
         Returns:
             List of section dictionaries containing modules and resources.

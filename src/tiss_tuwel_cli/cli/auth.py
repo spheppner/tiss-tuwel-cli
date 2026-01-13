@@ -37,15 +37,6 @@ def login(
         manual_login()
         return
 
-    try:
-        # This is just to guide the user to install the browser extras
-        from playwright.sync_api import sync_playwright
-    except ImportError:
-        rprint("[bold red]Playwright is not installed.[/bold red]")
-        rprint("Please run: [green]pip install 'tiss-tuwel-cli[browser]'[/green]")
-        rprint("After installation, run: [green]playwright install[/green] to set up the browsers.")
-        return
-
     rprint("[yellow]Attempting automated TUWEL login...[/yellow]")
 
     user, passw = config.get_login_credentials()
@@ -73,144 +64,146 @@ def login(
             passw = Prompt.ask("Enter TUWEL Password", password=True)
 
     with Progress() as progress:
-        task = progress.add_task("[cyan]Logging in...", total=4)
+        task = progress.add_task("[cyan]Logging in...", total=1)
+        success = _run_playwright_login_internal(user, passw, debug)
+        progress.update(task, advance=1)
 
+    if success:
+        rprint("[bold green]Token captured successfully![/bold green]")
         try:
-            with sync_playwright() as p:
-                storage_state_path = config.config_dir / "browser_state.json"
+            client = TuwelClient(config.get_tuwel_token())
+            info = client.get_site_info()
+            config.set_user_id(info.get('userid', 0))
+            rprint(f"Authenticated as [cyan]{info.get('fullname')}[/cyan] (ID: {info.get('userid')}).")
+        except Exception as e:
+            rprint(f"[yellow]Warning: Token captured but validation failed: {e}[/yellow]")
+    else:
+        rprint("[bold red]Failed to capture token.[/bold red]")
 
+
+def _run_playwright_login_internal(user: str, passw: str, debug: bool) -> bool:
+    """
+    Internal helper to run Playwright login. Returns True on success, False on failure.
+    This function is designed to be called internally and should not handle UI feedback.
+    """
+    try:
+        with sync_playwright() as p:
+            storage_state_path = config.config_dir / "browser_state.json"
+
+            if debug:
+                rprint("[bold magenta]DEBUG MODE ENABLED[/bold magenta]")
+
+            browser = p.chromium.launch(headless=not debug)
+            context = browser.new_context(storage_state=storage_state_path if storage_state_path.exists() else None)
+            page = context.new_page()
+
+            if debug:
+                # Log all requests and responses
+                page.on("request", lambda request: rprint(f"[magenta]>> Request: {request.method} {request.url}[/magenta]"))
+                page.on("response", lambda response: rprint(f"[magenta]<< Response: {response.status} {response.url}[/magenta]"))
+
+            # 1. Go to login page
+            page.goto("https://tuwel.tuwien.ac.at/login/index.php")
+            if debug:
+                rprint(f"[magenta]On page: {page.title()} ({page.url})[/magenta]")
+
+            # If already logged in, we might be on the dashboard or a confirmation page
+            is_logged_in = "dashboard" in page.url or "bereits als" in page.content()
+            if is_logged_in:
                 if debug:
-                    rprint("[bold magenta]DEBUG MODE ENABLED[/bold magenta]")
-
-                browser = p.chromium.launch(headless=not debug)
-                context = browser.new_context(storage_state=storage_state_path if storage_state_path.exists() else None)
-                page = context.new_page()
-
+                    rprint("[magenta]Dashboard URL or existing session detected, assuming already logged in.[/magenta]")
+            else:
+                # 2. Click TU Wien Login button
+                page.wait_for_selector('a:has-text("TU Wien Login")').click()
                 if debug:
-                    # Log all requests and responses
-                    page.on("request", lambda request: rprint(f"[magenta]>> Request: {request.method} {request.url}[/magenta]"))
-                    page.on("response", lambda response: rprint(f"[magenta]<< Response: {response.status} {response.url}[/magenta]"))
-
-                # 1. Go to login page
-                progress.update(task, description="[cyan]Navigating to TUWEL...", advance=1)
-                page.goto("https://tuwel.tuwien.ac.at/login/index.php")
-                if debug:
+                    page.wait_for_load_state('networkidle')
                     rprint(f"[magenta]On page: {page.title()} ({page.url})[/magenta]")
 
-                # If already logged in, we might be on the dashboard or a confirmation page
-                is_logged_in = "dashboard" in page.url or "bereits als" in page.content()
-                if is_logged_in:
-                    progress.update(task, description="[cyan]Already logged in...", advance=3)
-                    if debug:
-                        rprint("[magenta]Dashboard URL or existing session detected, assuming already logged in.[/magenta]")
-                else:
-                    # 2. Click TU Wien Login button
-                    progress.update(task, description="[cyan]Redirecting to IdP...", advance=1)
-                    page.wait_for_selector('a:has-text("TU Wien Login")').click()
-                    if debug:
-                        page.wait_for_load_state('networkidle')
-                        rprint(f"[magenta]On page: {page.title()} ({page.url})[/magenta]")
-
-                    # 3. Fill and submit credentials
-                    progress.update(task, description="[cyan]Submitting credentials...", advance=1)
-                    page.fill('input[name="username"]', user)
-                    page.fill('input[name="password"]', passw)
-                    page.click('button:has-text("Log in")')
-                    if debug:
-                        page.wait_for_load_state('networkidle')
-                        rprint(f"[magenta]On page: {page.title()} ({page.url})[/magenta]")
-
-                # 4. Wait for the token page and capture the URL
-                progress.update(task, description="[cyan]Capturing token...", advance=1)
-
-                token_url = ""
-
-                def on_request(request):
-                    nonlocal token_url
-                    if "moodlemobile://token=" in request.url:
-                        token_url = request.url
-                        if debug:
-                            rprint(f"[bold green]>>> TOKEN URL CAPTURED: {request.url}[/bold green]")
-
-                page.on("request", on_request)
-
-                try:
-                    page.goto("https://tuwel.tuwien.ac.at/admin/tool/mobile/launch.php?service=moodle_mobile_app&passport=student_api")
-                except PlaywrightTimeoutError:
-                    # This is expected if the page redirects to the custom protocol
-                    if debug:
-                        rprint("[magenta]Page.goto timed out as expected due to moodlemobile:// redirect.[/magenta]")
-                    pass
-                except Exception as e:
-                    # Also ignore the ERR_ABORTED error which can happen
-                    if "net::ERR_ABORTED" not in str(e):
-                        raise e
-                    if debug:
-                        rprint(f"[magenta]Ignoring expected error: {e}[/magenta]")
-
-
-                # Wait for the on_request handler to capture the token, polling instead of static wait
-                wait_seconds = 30 if debug else 10
+                # 3. Fill and submit credentials
+                page.fill('input[name="username"]', user)
+                page.fill('input[name="password"]', passw)
+                page.click('button:has-text("Log in")')
                 if debug:
-                    rprint(f"[magenta]Waiting for token capture for up to {wait_seconds}s...[/magenta]")
+                    page.wait_for_load_state('networkidle')
+                    rprint(f"[magenta]On page: {page.title()} ({page.url})[/magenta]")
 
-                end_time = time.time() + wait_seconds
-                while time.time() < end_time:
-                    if token_url:
-                        if debug:
-                            rprint("[magenta]Token found, proceeding immediately.[/magenta]")
-                        break
-                    page.wait_for_timeout(100)  # poll every 100ms
+            # 4. Wait for the token page and capture the URL
+            token_url = ""
 
-                if debug and not token_url:
-                    rprint("[bold red]DEBUG: Timed out waiting for token.[/bold red]")
-                    rprint("[bold red]Dumping page content:[/bold red]")
-                    try:
-                        rprint(page.content())
-                    except Exception as e:
-                        rprint(f"[bold red]Could not get page content: {e}[/bold red]")
+            def on_request(request):
+                nonlocal token_url
+                if "moodlemobile://token=" in request.url:
+                    token_url = request.url
+                    if debug:
+                        rprint(f"[bold green]>>> TOKEN URL CAPTURED: {request.url}[/bold green]")
 
-                # Save the session state for the next run
-                context.storage_state(path=storage_state_path)
+            page.on("request", on_request)
+
+            try:
+                page.goto("https://tuwel.tuwien.ac.at/admin/tool/mobile/launch.php?service=moodle_mobile_app&passport=student_api")
+            except PlaywrightTimeoutError:
+                # This is expected if the page redirects to the custom protocol
                 if debug:
-                    rprint(f"[magenta]Browser state saved to {storage_state_path}[/magenta]")
+                    rprint("[magenta]Page.goto timed out as expected due to moodlemobile:// redirect.[/magenta]")
+                pass
+            except Exception as e:
+                # Also ignore the ERR_ABORTED error which can happen
+                if "net::ERR_ABORTED" not in str(e):
+                    raise e
+                if debug:
+                    rprint(f"[magenta]Ignoring expected error: {e}[/magenta]")
 
-                browser.close()
 
-        except PlaywrightTimeoutError as e:
-            rprint("[bold red]Login failed: Timed out waiting for a page element.[/bold red]")
-            rprint("This could be due to a slow connection or a change in TUWEL's page structure.")
+            # Wait for the on_request handler to capture the token, polling instead of static wait
+            wait_seconds = 30 if debug else 10
             if debug:
-                rprint(f"[magenta]Playwright error: {e}[/magenta]")
-            return
-        except Exception as e:
-            rprint(f"[bold red]An unexpected error occurred:[/bold red] {e}")
-            return
+                rprint(f"[magenta]Waiting for token capture for up to {wait_seconds}s...[/magenta]")
+
+            end_time = time.time() + wait_seconds
+            while time.time() < end_time:
+                if token_url:
+                    if debug:
+                        rprint("[magenta]Token found, proceeding immediately.[/magenta]")
+                    break
+                page.wait_for_timeout(100)  # poll every 100ms
+
+            if debug and not token_url:
+                rprint("[bold red]DEBUG: Timed out waiting for token.[/bold red]")
+                rprint("[bold red]Dumping page content:[/bold red]")
+                try:
+                    rprint(page.content())
+                except Exception as e:
+                    rprint(f"[bold red]Could not get page content: {e}[/bold red]")
+
+            # Save the session state for the next run
+            context.storage_state(path=storage_state_path)
+            if debug:
+                rprint(f"[magenta]Browser state saved to {storage_state_path}[/magenta]")
+
+            browser.close()
+
+    except PlaywrightTimeoutError as e:
+        rprint("[bold red]Login failed: Timed out waiting for a page element.[/bold red]")
+        rprint("This could be due to a slow connection or a change in TUWEL's page structure.")
+        if debug:
+            rprint(f"[magenta]Playwright error: {e}[/magenta]")
+        return False
+    except Exception as e:
+        rprint(f"[bold red]An unexpected error occurred:[/bold red] {e}")
+        return False
 
     if not token_url:
         rprint("[bold red]Failed to capture the token URL.[/bold red]")
         rprint("It's possible the login failed or the page structure has changed.")
-        return
+        return False
 
     found_token = parse_mobile_token(token_url)
 
     if found_token:
         config.set_tuwel_token(found_token)
-        rprint("[bold green]Token captured successfully![/bold green]")
-
-        # Verify the token
-        try:
-            client = TuwelClient(found_token)
-            info = client.get_site_info()
-            config.set_user_id(info.get('userid', 0))
-            rprint(f"Authenticated as [cyan]{info.get('fullname')}[/cyan] (ID: {info.get('userid')}).")
-        except Exception as e:
-            # Even if validation fails, save the token
-            rprint(f"[yellow]Warning: Token captured but validation failed: {e}[/yellow]")
-            rprint("[dim]The token was saved anyway. Try running [green]tiss-tuwel-cli dashboard[/green] "
-                   "to see if it works.[/dim]")
+        return True
     else:
-        rprint("[red]Could not parse token from URL.[/red]")
+        return False
 
 
 def manual_login():
