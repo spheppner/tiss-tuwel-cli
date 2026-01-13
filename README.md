@@ -19,22 +19,6 @@ A Python CLI tool for TU Wien students to interact with the public TISS API and 
 
 ## Installation
 
-### From PyPI (recommended)
-
-```bash
-pip install tiss-tuwel-cli
-```
-
-### With browser automation support
-
-For automated login via browser:
-
-```bash
-pip install tiss-tuwel-cli[browser]
-```
-
-### Development installation
-
 ```bash
 # Clone the repository
 git clone https://github.com/spheppner/tiss-tuwel-cli.git
@@ -44,8 +28,10 @@ cd tiss-tuwel-cli
 python -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
-# Install in development mode
+# Install in dev mode
 pip install -e ".[dev]"
+# Or install normally
+pip install -e "."
 ```
 
 ## Usage
@@ -151,7 +137,7 @@ Configuration is stored in `~/.tu_companion/config.json` and includes:
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
+GNU GPL v3.0 License - see [LICENSE](LICENSE) for details.
 
 ## Contributing
 
