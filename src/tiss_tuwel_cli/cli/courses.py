@@ -7,17 +7,15 @@ grades, checkmarks, and downloading course materials.
 
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from rich import print as rprint
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from rich.text import Text
-from rich.tree import Tree
 
 from tiss_tuwel_cli.clients.tiss import TissClient
-from tiss_tuwel_cli.utils import strip_html, timestamp_to_date
+from tiss_tuwel_cli.utils import parse_percentage, strip_html, timestamp_to_date
 
 console = Console()
 tiss = TissClient()
@@ -94,8 +92,8 @@ def grades(course_id: Optional[int] = None):
     """
     Show grades.
     
-    Displays the grade report for a specific course. If no course ID
-    is provided, lists enrolled courses first.
+    Displays the grade report for a specific course in a clean table format.
+    If no course ID is provided, lists enrolled courses first.
     
     Args:
         course_id: The Moodle course ID to show grades for.
@@ -121,16 +119,23 @@ def grades(course_id: Optional[int] = None):
 
     table_data = tables[0].get('tabledata', [])
 
-    # Create a Tree for hierarchical display
-    root_tree = Tree(f"[bold blue]Grades for Course {course_id}[/bold blue]")
-    current_category = root_tree
+    # Create a clean table
+    table = Table(title=f"Grades for Course {course_id}", expand=True)
+    table.add_column("Item", style="white", no_wrap=False)
+    table.add_column("Grade", justify="right", style="cyan")
+    table.add_column("Range", justify="center", style="dim")
+    table.add_column("Percentage", justify="right", style="green")
 
     for item in table_data:
         # Extract text from the itemname dictionary
-        raw_name = item.get('itemname', {}).get('content', 'Unknown')
+        raw_name = item.get('itemname', {}).get('content', '')
+        if not raw_name:
+            continue
 
         # Clean HTML from the name
         clean_name = strip_html(raw_name)
+        if not clean_name:
+            continue
 
         # Grade Values - clean HTML from all values
         grade_raw = item.get('grade', {}).get('content', '-')
@@ -142,26 +147,45 @@ def grades(course_id: Optional[int] = None):
         range_raw = item.get('range', {}).get('content', '-')
         range_val = strip_html(range_raw) if range_raw else '-'
 
-        # Formatting based on item type
+        # Determine row style
         if "gesamt" in clean_name.lower() or "total" in clean_name.lower():
-            # Category total
-            text = Text(f"{clean_name}: {grade_val} ({percent_val})", style="bold yellow")
-            current_category.add(text)
-        elif grade_val != '-':
-            # Grade item
-            text = Text(f"{clean_name} | Grade: {grade_val} | Range: {range_val} | {percent_val}")
-            if "0,00 %" in percent_val or "0.00 %" in percent_val:
-                text.stylize("red")
-            elif "100" in percent_val:
-                text.stylize("green")
-            current_category.add(text)
-        else:
-            # Category header or empty item
-            if clean_name:
-                text = Text(clean_name, style="bold cyan")
-                current_category.add(text)
+            # Category total - highlight
+            table.add_row(
+                f"[bold yellow]▸ {clean_name}[/bold yellow]",
+                f"[bold yellow]{grade_val}[/bold yellow]",
+                range_val,
+                f"[bold yellow]{percent_val}[/bold yellow]"
+            )
+        elif grade_val != '-' and grade_val.strip():
+            # Regular grade item - use numeric comparison for styling
+            style = ""
+            pct = parse_percentage(percent_val)
+            if pct is not None:
+                if pct == 0.0:
+                    style = "red"
+                elif pct >= 100.0:
+                    style = "green"
 
-    console.print(root_tree)
+            if style:
+                table.add_row(
+                    f"  [{style}]{clean_name}[/{style}]",
+                    f"[{style}]{grade_val}[/{style}]",
+                    range_val,
+                    f"[{style}]{percent_val}[/{style}]"
+                )
+            else:
+                table.add_row(f"  {clean_name}", grade_val, range_val, percent_val)
+        else:
+            # Category header or pending item
+            if clean_name.strip():
+                table.add_row(
+                    f"[bold cyan]{clean_name}[/bold cyan]",
+                    "[dim]-[/dim]",
+                    range_val if range_val != '-' else "",
+                    "[dim]-[/dim]"
+                )
+
+    console.print(table)
 
 
 def checkmarks():
@@ -170,6 +194,7 @@ def checkmarks():
     
     Kreuzerlübungen are a TU Wien-specific exercise format where students
     mark which exercises they have completed before attending the lab session.
+    Displays exercises grouped by course with summary statistics.
     """
     # Import here to avoid circular imports
     from tiss_tuwel_cli.cli import get_tuwel_client
@@ -190,33 +215,88 @@ def checkmarks():
         rprint("[yellow]No Kreuzerlübungen found in your active courses.[/yellow]")
         return
 
-    table = Table(title="Kreuzerlübungen Overview")
-    table.add_column("Course ID", style="cyan")
-    table.add_column("Name", style="white")
-    table.add_column("Examples Checked", style="green")
-    table.add_column("Grade", style="magenta")
-    table.add_column("Deadline", style="red")
-
+    # Group checkmarks by course
+    courses_data: Dict[int, Dict[str, Any]] = {}
     for cm in checkmarks_list:
+        course_id = cm.get('course')
+        if course_id not in courses_data:
+            courses_data[course_id] = {
+                'exercises': [],
+                'total_checked': 0,
+                'total_possible': 0,
+                'total_grade': 0.0,
+                'graded_count': 0
+            }
+
         examples = cm.get('examples', [])
-        checked_count = sum(1 for ex in examples if ex.get('checked'))
-        total_count = len(examples)
+        checked = sum(1 for ex in examples if ex.get('checked'))
+        total = len(examples)
 
         feedback = cm.get('feedback', {})
-        grade = feedback.get('grade', '-')
+        grade_str = feedback.get('grade', '-')
 
-        cutoff = cm.get('cutoffdate', 0)
-        deadline = timestamp_to_date(cutoff) if cutoff else "No Deadline"
+        courses_data[course_id]['exercises'].append({
+            'name': cm.get('name'),
+            'checked': checked,
+            'total': total,
+            'grade': grade_str,
+            'deadline': cm.get('cutoffdate', 0)
+        })
 
-        table.add_row(
-            str(cm.get('course')),
-            cm.get('name'),
-            f"{checked_count}/{total_count}",
-            grade,
-            deadline
-        )
+        courses_data[course_id]['total_checked'] += checked
+        courses_data[course_id]['total_possible'] += total
 
-    console.print(table)
+        if grade_str and grade_str != '-':
+            try:
+                courses_data[course_id]['total_grade'] += float(grade_str)
+                courses_data[course_id]['graded_count'] += 1
+            except ValueError:
+                pass
+
+    # Display grouped by course with summary
+    rprint(Panel("[bold]Kreuzerlübungen Overview[/bold]", expand=False))
+    rprint()
+
+    for course_id, data in courses_data.items():
+        total_checked = data['total_checked']
+        total_possible = data['total_possible']
+        completion_pct = (total_checked / total_possible * 100) if total_possible > 0 else 0
+        avg_grade = data['total_grade'] / data['graded_count'] if data['graded_count'] > 0 else 0
+
+        # Summary header for the course
+        summary = f"[bold cyan]Course {course_id}[/bold cyan] | "
+        summary += f"Completion: [green]{total_checked}/{total_possible}[/green] ({completion_pct:.0f}%)"
+        if data['graded_count'] > 0:
+            summary += f" | Avg Grade: [magenta]{avg_grade:.1f}[/magenta]"
+        rprint(summary)
+
+        # Exercise table for this course
+        table = Table(expand=True, show_header=True, header_style="bold", box=None)
+        table.add_column("Exercise", style="white", no_wrap=False)
+        table.add_column("Checked", justify="center")
+        table.add_column("Grade", justify="right", style="magenta")
+        table.add_column("Deadline", style="dim")
+
+        for ex in data['exercises']:
+            checked_str = f"{ex['checked']}/{ex['total']}"
+            if ex['checked'] == ex['total']:
+                checked_str = f"[green]{checked_str} ✓[/green]"
+            elif ex['checked'] > 0:
+                checked_str = f"[yellow]{checked_str}[/yellow]"
+            else:
+                checked_str = f"[red]{checked_str}[/red]"
+
+            deadline = timestamp_to_date(ex['deadline']) if ex['deadline'] else "No deadline"
+
+            table.add_row(
+                ex['name'],
+                checked_str,
+                str(ex['grade']),
+                deadline
+            )
+
+        console.print(table)
+        rprint()  # Space between courses
 
 
 def download(course_id: int):

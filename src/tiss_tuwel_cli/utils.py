@@ -109,3 +109,27 @@ def strip_html(html_string: str) -> str:
     text = ' '.join(text.split())
 
     return text.strip()
+
+
+def parse_percentage(percent_str: str) -> Optional[float]:
+    """
+    Parse a percentage string to a float value.
+    
+    Args:
+        percent_str: String containing a percentage (e.g., "85,50 %", "100.00%", "-").
+        
+    Returns:
+        The percentage as a float (0-100), or None if not parseable.
+    """
+    if not percent_str or percent_str == '-':
+        return None
+    
+    # Remove % sign and spaces
+    cleaned = percent_str.replace('%', '').strip()
+    # Handle European comma decimal separator
+    cleaned = cleaned.replace(',', '.')
+    
+    try:
+        return float(cleaned)
+    except ValueError:
+        return None
