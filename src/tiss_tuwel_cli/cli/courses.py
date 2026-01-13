@@ -581,3 +581,28 @@ def _display_detailed_stats(stats: Dict):
     
     rprint("[dim]💡 The adjusted probability accounts for fairness: if you've been called less")
     rprint("   than average, your probability increases slightly.[/dim]")
+
+
+def open_vowi(course_title: str):
+    """
+    Open VoWi search for a course in the default browser.
+    
+    VoWi is the TU Wien student wiki with course information, materials,
+    old exams, and student experiences.
+    
+    Args:
+        course_title: The course title or shortname to search for.
+    """
+    import webbrowser
+    from tiss_tuwel_cli.utils import get_vowi_search_url
+    
+    url = get_vowi_search_url(course_title)
+    rprint(f"[cyan]Opening VoWi search for:[/cyan] {course_title}")
+    rprint(f"[dim]URL: {url}[/dim]")
+    
+    try:
+        webbrowser.open(url)
+        rprint("[green]✓ Opened in browser[/green]")
+    except Exception as e:
+        rprint(f"[red]Error opening browser: {e}[/red]")
+        rprint(f"[yellow]Please open this URL manually:[/yellow] {url}")

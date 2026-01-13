@@ -233,3 +233,67 @@ def days_until(date_str: str) -> Optional[int]:
         return delta.days
     except (ValueError, AttributeError):
         return None
+
+
+def get_vowi_search_url(course_title: str) -> str:
+    """
+    Generate a VoWi (TU Wien course wiki) search URL for a course.
+    
+    The VoWi is TU Wien's student-maintained wiki with course information,
+    materials, old exams, and experiences.
+    
+    Args:
+        course_title: The course title or shortname to search for.
+        
+    Returns:
+        URL that opens VoWi search with the course title pre-entered.
+    
+    Example:
+        >>> get_vowi_search_url("Algorithmen und Datenstrukturen")
+        'https://vowi.fsinf.at/wiki/Spezial:Suche?search=Algorithmen+und+Datenstrukturen'
+    """
+    # VoWi is a MediaWiki instance, use the Special:Search page
+    base_url = "https://vowi.fsinf.at/wiki/Spezial:Suche"
+    encoded_title = urllib.parse.quote_plus(course_title)
+    return f"{base_url}?search={encoded_title}"
+
+
+def get_tuwel_course_url(course_id: int) -> str:
+    """
+    Generate a direct TUWEL course URL.
+    
+    Args:
+        course_id: The TUWEL/Moodle course ID.
+        
+    Returns:
+        URL to the course page on TUWEL.
+    
+    Example:
+        >>> get_tuwel_course_url(12345)
+        'https://tuwel.tuwien.ac.at/course/view.php?id=12345'
+    """
+    return f"https://tuwel.tuwien.ac.at/course/view.php?id={course_id}"
+
+
+def get_tiss_course_url(course_number: str, semester: Optional[str] = None) -> str:
+    """
+    Generate a direct TISS course URL.
+    
+    Args:
+        course_number: The TISS course number (e.g., "192.167" or "192167").
+        semester: Optional semester code (e.g., "2024W"). If omitted, shows general course page.
+        
+    Returns:
+        URL to the course page on TISS.
+    
+    Example:
+        >>> get_tiss_course_url("192.167", "2024W")
+        'https://tiss.tuwien.ac.at/course/courseDetails.xhtml?dswid=...&courseNr=192167&semester=2024W'
+    """
+    # Remove dots from course number
+    course_number = course_number.replace(".", "")
+    
+    if semester:
+        return f"https://tiss.tuwien.ac.at/course/courseDetails.xhtml?courseNr={course_number}&semester={semester}"
+    else:
+        return f"https://tiss.tuwien.ac.at/course/courseDetails.xhtml?courseNr={course_number}"

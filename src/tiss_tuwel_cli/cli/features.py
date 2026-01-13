@@ -615,3 +615,151 @@ def submission_tracker():
         rprint()
     
     rprint("[dim]💡 Tip: Mark your calendar when you submit assignments to track your progress![/dim]")
+
+
+def unified_course_view(course_id: Optional[int] = None):
+    """
+    Show a unified view combining TISS and TUWEL data for courses.
+    
+    Displays course information from both platforms side-by-side, showing:
+    - TISS: Course details, ECTS, type, exam dates
+    - TUWEL: Assignments, grades, progress
+    
+    Args:
+        course_id: Optional specific course ID. If omitted, shows all current courses.
+    """
+    from tiss_tuwel_cli.cli import get_tuwel_client
+    from tiss_tuwel_cli.clients.tiss import TissClient
+    from tiss_tuwel_cli.utils import extract_course_number, get_current_semester, timestamp_to_date
+    
+    client = get_tuwel_client()
+    tiss = TissClient()
+    
+    if course_id:
+        # Show single course
+        with console.status("[bold green]Fetching course data...[/bold green]"):
+            courses = [c for c in client.get_enrolled_courses('inprogress') if c.get('id') == course_id]
+            if not courses:
+                rprint(f"[red]Course ID {course_id} not found in current courses.[/red]")
+                return
+    else:
+        # Show all courses
+        with console.status("[bold green]Fetching courses...[/bold green]"):
+            courses = client.get_enrolled_courses('inprogress')
+    
+    if not courses:
+        rprint("[yellow]No courses found.[/yellow]")
+        return
+    
+    semester = get_current_semester()
+    
+    for course in courses:
+        cid = course.get('id')
+        fullname = course.get('fullname', 'Unknown')
+        shortname = course.get('shortname', '')
+        
+        # Extract course number and try to fetch TISS data
+        course_num = extract_course_number(shortname)
+        
+        console.print()
+        console.print(f"[bold cyan]{'=' * 80}[/bold cyan]")
+        console.print(f"[bold white]{fullname}[/bold white]")
+        console.print(f"[dim]TUWEL ID: {cid} | Code: {shortname}[/dim]")
+        console.print()
+        
+        # Create side-by-side panels
+        tiss_content = ""
+        tuwel_content = ""
+        
+        # Fetch TISS data
+        if course_num:
+            tiss_content += f"[bold]Course Number:[/bold] {course_num}\n"
+            try:
+                details = tiss.get_course_details(course_num, semester)
+                if details and 'error' not in details:
+                    ects = details.get('ects', 'N/A')
+                    course_type = details.get('courseType', {})
+                    type_name = course_type.get('name') if isinstance(course_type, dict) else 'N/A'
+                    
+                    tiss_content += f"[bold]ECTS:[/bold] {ects}\n"
+                    tiss_content += f"[bold]Type:[/bold] {type_name}\n"
+                    
+                    # Get exam dates
+                    exams = tiss.get_exam_dates(course_num)
+                    if isinstance(exams, list) and exams:
+                        tiss_content += f"\n[bold cyan]📅 Upcoming Exams:[/bold cyan]\n"
+                        for exam in exams[:3]:
+                            date = exam.get('date', 'N/A')
+                            mode = exam.get('mode', 'Unknown')
+                            tiss_content += f"  • {date} - {mode}\n"
+                    else:
+                        tiss_content += "\n[dim]No exam dates available[/dim]"
+                else:
+                    tiss_content += "[dim]Course details not found in TISS[/dim]"
+            except Exception as e:
+                tiss_content += f"[dim]Error fetching TISS data: {str(e)[:50]}[/dim]"
+        else:
+            tiss_content = "[dim]Course number not found\nCannot fetch TISS data[/dim]"
+        
+        # Fetch TUWEL data - assignments
+        try:
+            assignments_data = client.get_assignments()
+            course_assignments = []
+            for c in assignments_data.get('courses', []):
+                if c.get('id') == cid:
+                    course_assignments = c.get('assignments', [])
+                    break
+            
+            if course_assignments:
+                now = datetime.now().timestamp()
+                pending = [a for a in course_assignments if a.get('duedate', 0) > now]
+                overdue = [a for a in course_assignments if a.get('duedate', 0) < now and a.get('duedate', 0) > now - (30*86400)]
+                
+                tuwel_content += f"[bold cyan]📝 Assignments:[/bold cyan]\n"
+                tuwel_content += f"  Pending: [yellow]{len(pending)}[/yellow]\n"
+                tuwel_content += f"  Overdue: [red]{len(overdue)}[/red]\n"
+                
+                if pending:
+                    tuwel_content += "\n[bold]Next Deadlines:[/bold]\n"
+                    for a in sorted(pending, key=lambda x: x.get('duedate', 0))[:3]:
+                        name = a.get('name', 'Unknown')
+                        due_str = timestamp_to_date(a.get('duedate'))
+                        tuwel_content += f"  • {name}\n    [dim]{due_str}[/dim]\n"
+            else:
+                tuwel_content += "[bold cyan]📝 Assignments:[/bold cyan]\n"
+                tuwel_content += "[dim]No assignments found[/dim]\n"
+            
+            # Try to get checkmarks
+            try:
+                checkmarks_data = client.get_checkmarks([cid])
+                checkmarks = checkmarks_data.get('checkmarks', [])
+                if checkmarks:
+                    total_checked = 0
+                    total_possible = 0
+                    for cm in checkmarks:
+                        examples = cm.get('examples', [])
+                        total_checked += sum(1 for ex in examples if ex.get('checked'))
+                        total_possible += len(examples)
+                    
+                    if total_possible > 0:
+                        pct = (total_checked / total_possible * 100)
+                        tuwel_content += f"\n[bold cyan]✅ Checkmarks:[/bold cyan]\n"
+                        tuwel_content += f"  Progress: {total_checked}/{total_possible} ([green]{pct:.0f}%[/green])\n"
+            except Exception:
+                pass  # Checkmarks not available for all courses
+                
+        except Exception as e:
+            tuwel_content += f"[dim]Error fetching TUWEL data: {str(e)[:50]}[/dim]"
+        
+        # Display side-by-side panels
+        from rich.columns import Columns
+        
+        tiss_panel = Panel(tiss_content, title="🔍 TISS Data", border_style="cyan", expand=True)
+        tuwel_panel = Panel(tuwel_content, title="📚 TUWEL Data", border_style="green", expand=True)
+        
+        console.print(Columns([tiss_panel, tuwel_panel], equal=True, expand=True))
+    
+    console.print()
+    console.print(f"[bold cyan]{'=' * 80}[/bold cyan]")
+    console.print()
+    rprint("[dim]💡 Use this view to see all information about your courses at a glance![/dim]")

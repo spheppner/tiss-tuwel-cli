@@ -16,6 +16,12 @@ A Python CLI tool for TU Wien students to interact with the public TISS API and 
   - Search course details
   - View exam dates and registration info
   - Access public university events
+  - **🆕 Unified TISS+TUWEL View** - See data from both platforms side-by-side
+
+- **🆕 VoWi Integration**:
+  - 📖 **Quick VoWi Access** - Open VoWi search for any course with one command
+  - 🔗 **Course Quick Links** - Direct links to TISS, TUWEL, and VoWi from course browser
+  - 🌐 **Wiki Integration** - Access student-written course materials and exam experiences
 
 - **Smart Student Features** (Interactive Mode):
   - 🔔 **Exam Registration Alerts** - Get notified before exam registration opens
@@ -23,6 +29,7 @@ A Python CLI tool for TU Wien students to interact with the public TISS API and 
   - 📅 **Weekly Overview** - Plan your week with all upcoming deadlines
   - 🏆 **Grade Summary** - View grades across courses with Austrian grading scale
   - 💡 **Smart Tips** - Context-aware suggestions based on your academic situation
+  - **🆕 Enhanced Dashboard** - Modern UI with progress bars and color-coded urgency
 
 - **🆕 Exercise Participation Tracking**:
   - 🎯 **Call Probability Calculator** - Track when you're called to present exercises
@@ -36,6 +43,7 @@ A Python CLI tool for TU Wien students to interact with the public TISS API and 
   - 📅 **Calendar Export** - Export all deadlines to ICS format (Google Calendar, Outlook, etc.)
   - 📌 **Submission Tracker** - Track assignment submission status to never miss a deadline
   - 📈 **Detailed Course Statistics** - View comprehensive stats for individual courses
+  - **🆕 Unified Course View** - Side-by-side display of TISS and TUWEL data for smart insights
 
 ## Installation
 
@@ -68,7 +76,9 @@ tiss-tuwel-cli --interactive
 
 **Features of Interactive Mode:**
 - **Keyboard Navigation** - Use arrow keys to navigate, Enter to select (no typing required)
-- **Smart Dashboard** - See upcoming deadlines with color-coded urgency levels
+- **Smart Dashboard** - See upcoming deadlines with color-coded urgency levels and progress bars
+- **🆕 Unified Course View** - See TISS and TUWEL data side-by-side for all courses
+- **🆕 VoWi Quick Access** - Open VoWi, TISS, or TUWEL pages directly from course browser
 - **🆕 Exam Registration Alerts** - Get notified when exam registration opens or is about to open
 - **🆕 Study Progress Tracker** - Track your checkmark completion and pending assignments
 - **🆕 Weekly Overview** - See all deadlines and events for the current week
@@ -77,7 +87,7 @@ tiss-tuwel-cli --interactive
 - **🆕 Exercise Participation Tracker** - Track and predict when you'll be called to present
 - **🆕 Advanced Analytics** - Compare courses, estimate study time, export calendars, and more
 - **Login from Menu** - Authenticate directly from the interactive menu
-- **Course Browser** - Navigate through courses with full titles, view grades, assignments, and download materials
+- **Course Browser** - Navigate through courses with full titles, TISS details, and quick links
 - **Kreuzerlübungen Overview** - Grouped by course with full names and completion statistics
 
 ### Authentication
@@ -147,6 +157,14 @@ tiss-tuwel-cli participation-stats --course-id 12345  # Specific course
 #### Advanced Features
 
 ```bash
+# View unified TISS+TUWEL data for all courses side-by-side
+tiss-tuwel-cli unified-view
+tiss-tuwel-cli unified-view --course-id 12345  # Specific course
+
+# Open VoWi (student wiki) search for a course
+tiss-tuwel-cli open-vowi "Algorithmen und Datenstrukturen"
+tiss-tuwel-cli open-vowi "192.167"
+
 # Compare workload across all courses
 tiss-tuwel-cli compare-courses
 
