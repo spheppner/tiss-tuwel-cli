@@ -46,8 +46,12 @@ tiss-tuwel-cli -i
 tiss-tuwel-cli --interactive
 ```
 
-This provides a clean, navigable menu to access all features, browse courses,
-view grades, and more.
+**Features of Interactive Mode:**
+- **Keyboard Navigation** - Use arrow keys to navigate, Enter to select (no typing required)
+- **Smart Dashboard** - See upcoming deadlines with color-coded urgency levels
+- **Login from Menu** - Authenticate directly from the interactive menu
+- **Course Browser** - Navigate through courses, view grades, assignments, and download materials
+- **Kreuzerlübungen Overview** - Grouped by course with completion statistics
 
 ### Authentication
 
