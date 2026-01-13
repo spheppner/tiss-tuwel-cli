@@ -40,13 +40,18 @@ def courses(classification: str = 'inprogress'):
     with console.status(f"[bold green]Fetching {classification} courses...[/bold green]"):
         enrolled_courses = client.get_enrolled_courses(classification)
 
-    table = Table(title=f"Enrolled Courses ({classification})")
+    table = Table(title=f"Enrolled Courses ({classification})", expand=True)
+    table.add_column("Course Title", style="cyan", no_wrap=False)
+    table.add_column("Code", style="dim", justify="center")
     table.add_column("ID", justify="right", style="dim")
-    table.add_column("Shortname", style="cyan")
-    table.add_column("Fullname")
 
     for course in enrolled_courses:
-        table.add_row(str(course.get('id')), course.get('shortname'), course.get('fullname'))
+        # Show full title prominently, shortname as code, ID for reference
+        table.add_row(
+            course.get('fullname', 'Unknown Course'),
+            course.get('shortname', '-'),
+            str(course.get('id'))
+        )
     console.print(table)
 
 
@@ -65,14 +70,16 @@ def assignments():
         data = client.get_assignments()
         courses_with_assignments = data.get('courses', [])
 
-    table = Table(title="Assignments")
-    table.add_column("Course", style="cyan")
-    table.add_column("Assignment", style="white")
+    table = Table(title="Assignments", expand=True)
+    table.add_column("Course", style="cyan", no_wrap=False)
+    table.add_column("Assignment", style="white", no_wrap=False)
     table.add_column("Due", style="red")
     table.add_column("Status", style="yellow")
 
     now = datetime.now().timestamp()
     for course in courses_with_assignments:
+        # Use full course name instead of shortname
+        course_name = course.get('fullname', course.get('shortname', 'Unknown'))
         for assign in course.get('assignments', []):
             due = assign.get('duedate', 0)
             if due < now - (30 * 86400):
@@ -80,7 +87,7 @@ def assignments():
 
             status = "Closed" if due < now else "Open"
             table.add_row(
-                course.get('shortname'),
+                course_name,
                 assign.get('name'),
                 timestamp_to_date(due),
                 status
@@ -206,6 +213,10 @@ def checkmarks():
             # Fetch ALL checkmarks by passing empty list
             checkmarks_data = client.get_checkmarks([])
             checkmarks_list = checkmarks_data.get('checkmarks', [])
+            # Also fetch course list to get course names
+            courses = client.get_enrolled_courses('inprogress')
+            course_names = {c.get('id'): c.get('fullname', f"Course {c.get('id')}") 
+                           for c in courses}
         except Exception as e:
             rprint(f"[bold red]Error fetching checkmarks:[/bold red] {e}")
             rprint("[dim]This may be due to a bug in the mod_checkmark plugin on TUWEL.[/dim]")
@@ -263,8 +274,12 @@ def checkmarks():
         completion_pct = (total_checked / total_possible * 100) if total_possible > 0 else 0
         avg_grade = data['total_grade'] / data['graded_count'] if data['graded_count'] > 0 else 0
 
-        # Summary header for the course
-        summary = f"[bold cyan]Course {course_id}[/bold cyan] | "
+        # Get course name
+        course_name = course_names.get(course_id, f'Course {course_id}')
+        
+        # Summary header for the course - show course name prominently
+        summary = f"[bold cyan]{course_name}[/bold cyan]\n"
+        summary += f"[dim]ID: {course_id}[/dim] | "
         summary += f"Completion: [green]{total_checked}/{total_possible}[/green] ({completion_pct:.0f}%)"
         if data['graded_count'] > 0:
             summary += f" | Avg Grade: [magenta]{avg_grade:.1f}[/magenta]"
@@ -378,3 +393,191 @@ def tiss_course(course_number: str, semester: str = "2024W"):
         console.print(t)
     else:
         rprint("[yellow]No future exam dates found.[/yellow]")
+
+
+def track_participation(
+    course_id: int,
+    exercise_name: str,
+    was_called: bool = False,
+    group_size: Optional[int] = None
+):
+    """
+    Track participation in an exercise session.
+    
+    Record when you attend an exercise session and whether you were called
+    to present a solution. This data is used to calculate probabilities
+    for future sessions.
+    
+    Args:
+        course_id: The Moodle course ID.
+        exercise_name: Name/number of the exercise (e.g., "Exercise 3").
+        was_called: True if you were called to present, False otherwise.
+        group_size: Optional average group size for probability calculations.
+    """
+    from tiss_tuwel_cli.cli import get_tuwel_client
+    from tiss_tuwel_cli.participation_tracker import ParticipationTracker
+    
+    client = get_tuwel_client()
+    tracker = ParticipationTracker()
+    
+    # Get course name
+    with console.status("[bold green]Fetching course info...[/bold green]"):
+        courses = client.get_enrolled_courses('inprogress')
+        course_name = None
+        for course in courses:
+            if course.get('id') == course_id:
+                course_name = course.get('fullname', f'Course {course_id}')
+                break
+        
+        if not course_name:
+            course_name = f'Course {course_id}'
+    
+    # Record the participation
+    tracker.record_participation(
+        course_id=course_id,
+        course_name=course_name,
+        exercise_name=exercise_name,
+        was_called=was_called
+    )
+    
+    # Update group size if provided
+    if group_size and group_size > 0:
+        tracker.set_group_size(course_id, group_size)
+    
+    # Show updated statistics
+    stats = tracker.calculate_probability(course_id)
+    if stats:
+        status = "[green]✓ Called[/green]" if was_called else "[dim]Not called[/dim]"
+        rprint(f"\n[bold]Recorded:[/bold] {exercise_name} - {status}")
+        rprint(f"[bold cyan]{course_name}[/bold cyan]")
+        rprint()
+        rprint(f"Total sessions: {stats['total_sessions']}")
+        rprint(f"Times called: {stats['times_called']}")
+        rprint(f"Group size: {stats['group_size']}")
+        rprint()
+        rprint(f"[bold]Probability of being called next time:[/bold]")
+        rprint(f"  Base: [cyan]{stats['base_probability']:.1f}%[/cyan]")
+        rprint(f"  Adjusted: [yellow]{stats['adjusted_probability']:.1f}%[/yellow]")
+    else:
+        rprint("[green]✓ Participation recorded[/green]")
+
+
+def participation_stats(course_id: Optional[int] = None):
+    """
+    Show participation statistics and call probabilities.
+    
+    Display your participation history for exercise sessions and the
+    calculated probability of being called in the next session.
+    
+    Args:
+        course_id: Optional course ID to show stats for. If not provided,
+                   shows stats for all tracked courses.
+    """
+    from tiss_tuwel_cli.participation_tracker import ParticipationTracker
+    
+    tracker = ParticipationTracker()
+    
+    if course_id:
+        # Show detailed stats for one course
+        stats = tracker.calculate_probability(course_id)
+        if not stats:
+            rprint(f"[yellow]No participation data found for course {course_id}.[/yellow]")
+            rprint("[dim]Use 'track-participation' to start tracking.[/dim]")
+            return
+        
+        _display_detailed_stats(stats)
+    else:
+        # Show summary for all courses
+        all_courses = tracker.get_all_courses()
+        if not all_courses:
+            rprint("[yellow]No participation data found.[/yellow]")
+            rprint("[dim]Use 'track-participation' to start tracking your exercise sessions.[/dim]")
+            return
+        
+        rprint(Panel("[bold]Exercise Participation Overview[/bold]", expand=False))
+        rprint()
+        
+        table = Table(title="Call Probabilities", expand=True)
+        table.add_column("Course", style="white", no_wrap=False)
+        table.add_column("Sessions", justify="center", style="cyan")
+        table.add_column("Called", justify="center", style="green")
+        table.add_column("Group Size", justify="center", style="dim")
+        table.add_column("Next Call Prob.", justify="right", style="yellow")
+        
+        for cid, course_data in all_courses.items():
+            stats = tracker.calculate_probability(cid)
+            if stats:
+                # Color-code probability
+                prob = stats['adjusted_probability']
+                if prob > 50:
+                    prob_style = "red"
+                elif prob > 30:
+                    prob_style = "yellow"
+                else:
+                    prob_style = "green"
+                
+                table.add_row(
+                    stats['course_name'],
+                    str(stats['total_sessions']),
+                    str(stats['times_called']),
+                    str(stats['group_size']),
+                    f"[{prob_style}]{prob:.1f}%[/{prob_style}]"
+                )
+        
+        console.print(table)
+        rprint()
+        rprint("[dim]💡 Tip: Use 'participation-stats --course-id <ID>' for detailed history.[/dim]")
+
+
+def _display_detailed_stats(stats: Dict):
+    """Display detailed participation statistics for a course."""
+    rprint(Panel(
+        f"[bold cyan]{stats['course_name']}[/bold cyan]\n"
+        f"[dim]Course ID: {stats['course_id']}[/dim]",
+        title="📊 Participation Statistics"
+    ))
+    rprint()
+    
+    # Summary metrics
+    table = Table(show_header=False, box=None, expand=True)
+    table.add_column("Metric", style="white")
+    table.add_column("Value", style="cyan", justify="right")
+    
+    table.add_row("Total sessions attended", str(stats['total_sessions']))
+    table.add_row("Times called to present", str(stats['times_called']))
+    table.add_row("Group size (average)", str(stats['group_size']))
+    table.add_row("Expected calls (theoretical)", f"{stats['expected_calls']:.2f}")
+    
+    console.print(table)
+    rprint()
+    
+    # Probability display
+    prob = stats['adjusted_probability']
+    if prob > 50:
+        prob_color = "red"
+        prob_msg = "High chance!"
+    elif prob > 30:
+        prob_color = "yellow"
+        prob_msg = "Moderate chance"
+    else:
+        prob_color = "green"
+        prob_msg = "Low chance"
+    
+    rprint(Panel(
+        f"Base (uniform): [cyan]{stats['base_probability']:.1f}%[/cyan]\n"
+        f"Adjusted (fair): [{prob_color}]{prob:.1f}%[/{prob_color}] - {prob_msg}",
+        title="🎲 Probability of Being Called Next Time"
+    ))
+    rprint()
+    
+    # Recent sessions
+    if stats.get('sessions'):
+        rprint("[bold]Recent Sessions:[/bold]")
+        sessions = stats['sessions'][-10:]  # Last 10
+        for session in reversed(sessions):  # Most recent first
+            called_mark = "[green]✓ Called[/green]" if session.get('was_called') else "[dim]○ Not called[/dim]"
+            rprint(f"  {session.get('date', 'N/A')} - {session.get('exercise', 'N/A')} - {called_mark}")
+        rprint()
+    
+    rprint("[dim]💡 The adjusted probability accounts for fairness: if you've been called less")
+    rprint("   than average, your probability increases slightly.[/dim]")

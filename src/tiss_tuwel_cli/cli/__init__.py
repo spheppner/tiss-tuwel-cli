@@ -69,7 +69,7 @@ def get_tuwel_client() -> TuwelClient:
 
 
 # Import and register command modules
-from tiss_tuwel_cli.cli import auth, courses, dashboard
+from tiss_tuwel_cli.cli import auth, courses, dashboard, features
 
 # Register commands from submodules
 app.command()(auth.login)
@@ -81,6 +81,15 @@ app.command()(courses.grades)
 app.command()(courses.checkmarks)
 app.command()(courses.download)
 app.command()(courses.tiss_course)
+app.command(name="track-participation")(courses.track_participation)
+app.command(name="participation-stats")(courses.participation_stats)
+
+# Register new feature commands
+app.command(name="export-calendar")(features.export_calendar)
+app.command(name="course-stats")(features.course_statistics)
+app.command(name="study-time")(features.estimate_study_time)
+app.command(name="compare-courses")(features.compare_courses)
+app.command(name="submission-tracker")(features.submission_tracker)
 
 
 __all__ = ["app", "console", "config", "tiss", "get_tuwel_client"]
