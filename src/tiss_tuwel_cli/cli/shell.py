@@ -5,7 +5,6 @@ This module provides an advanced REPL (Read-Eval-Print Loop) shell interface
 with command history, tab completion, and a clean prompt-based experience.
 """
 
-
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.history import InMemoryHistory
@@ -179,6 +178,7 @@ def execute_command(command_line: str) -> bool:
         try:
             # Import the CLI app
             # Use typer's testing runner to execute commands
+            # This is the recommended way to invoke Typer commands programmatically
             from typer.testing import CliRunner
 
             from tiss_tuwel_cli.cli import app
@@ -194,6 +194,9 @@ def execute_command(command_line: str) -> bool:
             if result.exit_code != 0:
                 if result.exception and not isinstance(result.exception, SystemExit):
                     console.print(f"[red]Error: {result.exception}[/red]")
+                elif not result.output:
+                    # Command failed but produced no output or exception details
+                    console.print(f"[red]Command failed with exit code {result.exit_code}[/red]")
 
         except KeyboardInterrupt:
             console.print("\n[yellow]Command interrupted[/yellow]")
