@@ -512,7 +512,14 @@ class InteractiveMenu:
                     Choice(value="weekly", name="📆 This Week"),
                     Choice(value="assignments", name="📝 Assignments"),
                     Choice(value="checkmarks", name="✅ Kreuzerlübungen"),
+                    Choice(value="participation", name="🎯 Exercise Participation"),
                     Choice(value="grades", name="🏆 Grade Summary"),
+                    Separator("─── Advanced Features ───"),
+                    Choice(value="compare", name="📊 Compare All Courses"),
+                    Choice(value="study_time", name="⏱️ Study Time Estimator"),
+                    Choice(value="export_cal", name="📅 Export Calendar"),
+                    Choice(value="submissions", name="📌 Submission Tracker"),
+                    Separator(),
                     Choice(value="tiss", name="🔍 Search TISS"),
                     Separator(),
                 ])
@@ -549,8 +556,18 @@ class InteractiveMenu:
                 self._show_assignments()
             elif action == "checkmarks":
                 self._show_checkmarks()
+            elif action == "participation":
+                self._show_participation_menu()
             elif action == "grades":
                 self._show_grade_summary()
+            elif action == "compare":
+                self._show_course_comparison()
+            elif action == "study_time":
+                self._show_study_time_estimate()
+            elif action == "export_cal":
+                self._export_calendar()
+            elif action == "submissions":
+                self._show_submission_tracker()
             elif action == "tiss":
                 self._show_tiss_search()
 
@@ -1237,6 +1254,268 @@ class InteractiveMenu:
         console.print()
         rprint(f"[dim]📊 Showing grades from {len(course_grades)} course(s)[/dim]")
 
+        self._wait_for_continue()
+
+    def _show_participation_menu(self):
+        """Show participation tracking menu."""
+        from tiss_tuwel_cli.participation_tracker import ParticipationTracker
+        
+        tracker = ParticipationTracker()
+        
+        while True:
+            self._clear_screen()
+            self._print_header("Exercise Participation Tracker")
+            
+            # Show summary
+            all_courses = tracker.get_all_courses()
+            if all_courses:
+                rprint("[bold]📊 Tracked Courses[/bold]")
+                for course_id, data in all_courses.items():
+                    stats = tracker.calculate_probability(course_id)
+                    if stats:
+                        prob = stats['adjusted_probability']
+                        prob_color = "red" if prob > 50 else "yellow" if prob > 30 else "green"
+                        rprint(
+                            f"  [{prob_color}]•[/{prob_color}] {stats['course_name']} "
+                            f"(ID: {course_id}) - {stats['times_called']}/{stats['total_sessions']} - "
+                            f"[{prob_color}]{prob:.0f}% chance[/{prob_color}]"
+                        )
+                rprint()
+            else:
+                rprint("[dim]No participation data recorded yet.[/dim]")
+                rprint()
+            
+            choices = [
+                Choice(value="record", name="✏️  Record Session Participation"),
+                Choice(value="stats", name="📊 View Detailed Statistics"),
+                Choice(value="group", name="👥 Set Group Size"),
+                Separator(),
+                Choice(value="back", name="← Back"),
+            ]
+            
+            action = inquirer.select(
+                message="Select an option:",
+                choices=choices,
+                pointer="→",
+                qmark="",
+            ).execute()
+            
+            if action == "back":
+                break
+            elif action == "record":
+                self._record_participation()
+            elif action == "stats":
+                self._view_participation_stats()
+            elif action == "group":
+                self._set_group_size()
+
+    def _record_participation(self):
+        """Record a participation event."""
+        from tiss_tuwel_cli.participation_tracker import ParticipationTracker
+        
+        self._clear_screen()
+        self._print_header("Record Participation")
+        
+        # Get course list
+        client = self._get_tuwel_client()
+        if not client:
+            return
+        
+        with console.status("[bold green]Fetching courses...[/bold green]"):
+            courses = client.get_enrolled_courses('inprogress')
+        
+        if not courses:
+            rprint("[yellow]No current courses found.[/yellow]")
+            self._wait_for_continue()
+            return
+        
+        # Select course
+        course_choices = [
+            Choice(
+                value=course,
+                name=f"[{course.get('id')}] {course.get('fullname', 'Unknown')}"
+            )
+            for course in courses
+        ]
+        
+        selected_course = inquirer.select(
+            message="Select course:",
+            choices=course_choices,
+            pointer="→",
+        ).execute()
+        
+        # Enter exercise name
+        exercise_name = inquirer.text(
+            message="Exercise name/number (e.g., 'Exercise 3'):",
+        ).execute()
+        
+        if not exercise_name:
+            return
+        
+        # Were you called?
+        was_called = inquirer.confirm(
+            message="Were you called to present?",
+            default=False
+        ).execute()
+        
+        # Record it
+        tracker = ParticipationTracker()
+        tracker.record_participation(
+            course_id=selected_course.get('id'),
+            course_name=selected_course.get('fullname', f"Course {selected_course.get('id')}"),
+            exercise_name=exercise_name,
+            was_called=was_called
+        )
+        
+        # Show updated stats
+        stats = tracker.calculate_probability(selected_course.get('id'))
+        if stats:
+            self._clear_screen()
+            self._print_header("Recorded!")
+            
+            status = "[green]✓ Called[/green]" if was_called else "[dim]○ Not called[/dim]"
+            rprint(f"[bold]{exercise_name}[/bold] - {status}")
+            rprint(f"[bold cyan]{stats['course_name']}[/bold cyan]")
+            rprint()
+            rprint(f"Total sessions: {stats['total_sessions']}")
+            rprint(f"Times called: {stats['times_called']}")
+            rprint(f"Next call probability: [yellow]{stats['adjusted_probability']:.1f}%[/yellow]")
+        
+        self._wait_for_continue()
+
+    def _view_participation_stats(self):
+        """View detailed participation statistics."""
+        from tiss_tuwel_cli.participation_tracker import ParticipationTracker
+        
+        self._clear_screen()
+        self._print_header("Participation Statistics")
+        
+        tracker = ParticipationTracker()
+        all_courses = tracker.get_all_courses()
+        
+        if not all_courses:
+            rprint("[yellow]No participation data found.[/yellow]")
+            self._wait_for_continue()
+            return
+        
+        # Select course
+        course_choices = [
+            Choice(
+                value=course_id,
+                name=f"{data.get('course_name', f'Course {course_id}')} (ID: {course_id})"
+            )
+            for course_id, data in all_courses.items()
+        ]
+        
+        selected_id = inquirer.select(
+            message="Select course:",
+            choices=course_choices,
+            pointer="→",
+        ).execute()
+        
+        # Show detailed stats
+        stats = tracker.calculate_probability(selected_id)
+        if stats:
+            self._clear_screen()
+            from tiss_tuwel_cli.cli.courses import _display_detailed_stats
+            _display_detailed_stats(stats)
+        
+        self._wait_for_continue()
+
+    def _set_group_size(self):
+        """Set the group size for a course."""
+        from tiss_tuwel_cli.participation_tracker import ParticipationTracker
+        
+        self._clear_screen()
+        self._print_header("Set Group Size")
+        
+        tracker = ParticipationTracker()
+        all_courses = tracker.get_all_courses()
+        
+        if not all_courses:
+            rprint("[yellow]No participation data found. Record a session first.[/yellow]")
+            self._wait_for_continue()
+            return
+        
+        # Select course
+        course_choices = [
+            Choice(
+                value=course_id,
+                name=f"{data.get('course_name', f'Course {course_id}')} (current: {data.get('group_size', 1)})"
+            )
+            for course_id, data in all_courses.items()
+        ]
+        
+        selected_id = inquirer.select(
+            message="Select course:",
+            choices=course_choices,
+            pointer="→",
+        ).execute()
+        
+        # Get new group size
+        group_size = inquirer.number(
+            message="Average group size (number of students):",
+            min_allowed=1,
+            max_allowed=100,
+            default=10
+        ).execute()
+        
+        if group_size:
+            tracker.set_group_size(selected_id, int(group_size))
+            rprint(f"[green]✓ Group size updated to {int(group_size)}[/green]")
+        
+        self._wait_for_continue()
+
+    def _show_course_comparison(self):
+        """Show course comparison view."""
+        self._clear_screen()
+        self._print_header("Course Comparison")
+        
+        from tiss_tuwel_cli.cli.features import compare_courses
+        try:
+            compare_courses()
+        except Exception as e:
+            rprint(f"[red]Error: {e}[/red]")
+        
+        self._wait_for_continue()
+
+    def _show_study_time_estimate(self):
+        """Show study time estimation."""
+        self._clear_screen()
+        self._print_header("Study Time Estimator")
+        
+        from tiss_tuwel_cli.cli.features import estimate_study_time
+        try:
+            estimate_study_time()
+        except Exception as e:
+            rprint(f"[red]Error: {e}[/red]")
+        
+        self._wait_for_continue()
+
+    def _export_calendar(self):
+        """Export calendar to ICS."""
+        self._clear_screen()
+        self._print_header("Export Calendar")
+        
+        from tiss_tuwel_cli.cli.features import export_calendar
+        try:
+            export_calendar()
+        except Exception as e:
+            rprint(f"[red]Error: {e}[/red]")
+        
+        self._wait_for_continue()
+
+    def _show_submission_tracker(self):
+        """Show submission tracker."""
+        self._clear_screen()
+        self._print_header("Assignment Submission Tracker")
+        
+        from tiss_tuwel_cli.cli.features import submission_tracker
+        try:
+            submission_tracker()
+        except Exception as e:
+            rprint(f"[red]Error: {e}[/red]")
+        
         self._wait_for_continue()
 
     def _show_tiss_search(self):
