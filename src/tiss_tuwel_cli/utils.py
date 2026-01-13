@@ -252,7 +252,7 @@ def get_vowi_search_url(course_title: str) -> str:
         >>> get_vowi_search_url("Algorithmen und Datenstrukturen")
         'https://vowi.fsinf.at/wiki/Spezial:Suche?search=Algorithmen+und+Datenstrukturen'
     """
-    # VoWi is a MediaWiki instance, use the Special:Search page
+    # VoWi is a MediaWiki instance, use the Special:Search page (Spezial:Suche in German)
     base_url = "https://vowi.fsinf.at/wiki/Spezial:Suche"
     encoded_title = urllib.parse.quote_plus(course_title)
     return f"{base_url}?search={encoded_title}"

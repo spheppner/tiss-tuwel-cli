@@ -98,11 +98,11 @@ def dashboard():
     console.print()
 
     # Study progress overview
+    pending_assignments = 0
     try:
         # Get assignments for progress calculation
         assignments_data = client.get_assignments()
         total_assignments = 0
-        pending_assignments = 0
         
         for course in assignments_data.get('courses', []):
             for assignment in course.get('assignments', []):
