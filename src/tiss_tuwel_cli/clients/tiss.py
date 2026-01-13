@@ -26,7 +26,7 @@ class TissClient:
     
     Example:
         >>> client = TissClient()
-        >>> course = client.get_course_details("192.167", "2024W")
+        >>> course = client.get_course_details("192.167", "2025W")
         >>> exams = client.get_exam_dates("192.167")
     """
 
@@ -46,7 +46,7 @@ class TissClient:
         Make a GET request to the TISS API.
         
         Args:
-            endpoint: API endpoint path (e.g., "/course/123456-2024W").
+            endpoint: API endpoint path (e.g., "/course/123456-2025W").
             params: Optional query parameters.
             
         Returns:
@@ -54,6 +54,8 @@ class TissClient:
         """
         url = f"{self.BASE_URL}{endpoint}"
         try:
+            # Try to get JSON first, but TISS often returns XML despite Request headers
+            # Note: We don't force Accept: application/json anymore as it caused 500 errors
             response = requests.get(url, params=params, timeout=self.timeout)
             response.raise_for_status()
 
@@ -61,12 +63,72 @@ class TissClient:
             if not response.content or not response.text.strip():
                 return {"error": "Empty response from TISS API"}
 
-            return response.json()
+            # Try JSON parsing
+            try:
+                return response.json()
+            except ValueError:
+                # Fallback: Try XML parsing
+                try:
+                    import xml.etree.ElementTree as ET
+                    root = ET.fromstring(response.content)
+                    
+                    # Namespaces found in the TISS response
+                    ns = {
+                        '': 'https://tiss.tuwien.ac.at/api/schemas/course/v10',
+                        'ns2': 'https://tiss.tuwien.ac.at/api/schemas/i18n/v10'
+                    }
+                    
+                    # The root might be <tuvienna>, we need to find <course> inside it
+                    # Note: find() with default namespace requires explicit namespace URI in path or strict Usage
+                    # We'll try finding 'course' with the namespace
+                    course_elem = root.find(f"{{{ns['']}}}course")
+                    # If not found directly, maybe root IS the course or different structure, try relative find
+                    if course_elem is None:
+                        course_elem = root.find('course') # Try without NS if previous failed
+                    if course_elem is None:
+                        # Maybe root is the course itself (unlikely based on provided XML but possible)
+                        course_elem = root
+
+                    result = {}
+                    
+                    # Helper to get text from element with namespace
+                    def get_text(elem, tag, namespace=ns['']):
+                        # Try with namespace first
+                        sub = elem.find(f"{{{namespace}}}{tag}")
+                        if sub is not None:
+                            return sub.text
+                        # Try without namespace for robustness
+                        sub = elem.find(tag)
+                        if sub is not None:
+                            return sub.text
+                        return None
+                    
+                    # Parse course details
+                    result['courseNumber'] = get_text(course_elem, 'courseNumber')
+                    result['semester'] = get_text(course_elem, 'semesterCode')
+                    result['courseType'] = get_text(course_elem, 'courseType')
+                    result['ects'] = get_text(course_elem, 'ects')  # Might be missing in XML
+                    if not result['ects']:
+                        # Fallback to weekly hours if ECTS invalid
+                        result['ects'] = get_text(course_elem, 'weeklyHours') + "h" if get_text(course_elem, 'weeklyHours') else None
+
+                    # Parse Title (localized)
+                    title_elem = course_elem.find(f"{{{ns['']}}}title")
+                    if title_elem is not None:
+                        result['title'] = {
+                            'en': get_text(title_elem, 'en', ns['ns2']),
+                            'de': get_text(title_elem, 'de', ns['ns2'])
+                        }
+                    else:
+                         # Fallback if title element not found standard way
+                         result['title'] = {'en': 'Unknown Course', 'de': 'Unbekannter Kurs'}
+                        
+                    return result
+                except Exception as xml_e:
+                    # Return a clear error if both JSON and XML fail
+                    return {"error": f"Failed to parse TISS response. JSON error: {str(e)}. XML error: {str(xml_e)}"}
         except requests.RequestException as e:
             return {"error": str(e)}
-        except ValueError as e:
-            # JSONDecodeError is a subclass of ValueError
-            return {"error": f"Invalid JSON response: {str(e)}"}
 
     def get_course_details(self, course_number: str, semester: str) -> Dict[str, Any]:
         """
@@ -74,7 +136,7 @@ class TissClient:
         
         Args:
             course_number: Course number (e.g., "192.167" or "192167").
-            semester: Semester code (e.g., "2024W" for winter, "2024S" for summer).
+            semester: Semester code (e.g., "2025W" for winter, "2024S" for summer).
             
         Returns:
             Dictionary containing course details including title, ECTS, and type.
@@ -82,7 +144,7 @@ class TissClient:
         
         Example:
             >>> client = TissClient()
-            >>> details = client.get_course_details("192.167", "2024W")
+            >>> details = client.get_course_details("192.167", "2025W")
             >>> print(details.get('title', {}).get('en'))
         """
         course_number = course_number.replace(".", "")

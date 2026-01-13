@@ -7,6 +7,7 @@ TUWEL authentication tokens.
 
 import json
 import time
+from pathlib import Path
 
 from rich import print as rprint
 from rich.console import Console
@@ -51,11 +52,37 @@ def login():
     driver = None
     try:
         try:
+            # Enable persistent user data to keep login sessions
+            # We use a dedicated profile directory in the user's home folder.
+            # This allows the CLI to keep a separate session from the main browser
+            # while still persisting cookies/storage between runs.
+            user_data_dir = Path.home() / ".tu_companion" / "browser_data"
+            user_data_dir.mkdir(parents=True, exist_ok=True)
+            options.add_argument(f"user-data-dir={str(user_data_dir)}")
+            options.add_argument("--profile-directory=Default")
+            
+            # Reduce automation detection which might affect session persistence or login pages
+            options.add_argument("--disable-blink-features=AutomationControlled")
+            options.add_experimental_option("excludeSwitches", ["enable-automation"])
+            options.add_experimental_option("useAutomationExtension", False)
+            
             driver = webdriver.Chrome(options=options)
         except WebDriverException:
             # Fallback to Firefox (logging works differently, this might be less reliable)
             rprint("[yellow]Chrome not found, trying Firefox...[/yellow]")
-            driver = webdriver.Firefox()
+            try:
+                # Firefox persistence
+                ff_profile_path = Path.home() / ".tu_companion" / "firefox_profile"
+                ff_profile_path.mkdir(parents=True, exist_ok=True)
+                
+                ff_options = webdriver.FirefoxOptions()
+                ff_options.add_argument("-profile")
+                ff_options.add_argument(str(ff_profile_path))
+                
+                driver = webdriver.Firefox(options=ff_options)
+            except Exception as e:
+                rprint(f"[yellow]Firefox profile setup failed, using default: {e}[/yellow]")
+                driver = webdriver.Firefox()
 
         driver.get(login_url)
 

@@ -35,9 +35,6 @@ SHELL_COMMANDS = {
     "open-vowi": "Open VoWi search",
     "export-calendar": "Export calendar to ICS",
     "course-stats": "Show course statistics",
-    "study-time": "Estimate study time",
-    "compare-courses": "Compare all courses",
-    "submission-tracker": "Track assignment submissions",
     "unified-view": "Show unified TISS+TUWEL view",
     "interactive": "Start interactive menu mode",
 }

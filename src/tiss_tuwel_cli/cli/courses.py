@@ -361,13 +361,13 @@ def download(course_id: int):
     rprint(f"[bold green]Done! Downloaded {count} files.[/bold green]")
 
 
-def tiss_course(course_number: str, semester: str = "2024W"):
+def tiss_course(course_number: str, semester: str = "2025W"):
     """
     Search TISS for course details and exams.
     
     Args:
-        course_number: The TISS course number (e.g., "192.167").
-        semester: Semester code (e.g., "2024W" for winter, "2024S" for summer).
+        course_number: The TISS course number (e.g., "104.633").
+        semester: Semester code (e.g., "2025W" for winter, "2024S" for summer).
     """
     with console.status("[bold green]Searching TISS...[/bold green]"):
         details = tiss.get_course_details(course_number, semester)
@@ -580,7 +580,7 @@ def _display_detailed_stats(stats: Dict):
         rprint()
     
     rprint("[dim]💡 The adjusted probability accounts for fairness: if you've been called less")
-    rprint("   than average, your probability increases slightly.[/dim]")
+    rprint("[dim]   than average, your probability increases slightly.[/dim]")
 
 
 def open_vowi(course_title: str):

@@ -140,7 +140,7 @@ def extract_course_number(shortname: str) -> Optional[str]:
     Extract a TISS course number from a TUWEL course shortname.
     
     TUWEL course shortnames often contain the TISS course number in various formats
-    like "192.167-2024W" or "VU 192.167" or just embedded in the name.
+    like "192.167-2025W" or "VU 192.167" or just embedded in the name.
     
     Args:
         shortname: The TUWEL course shortname.
@@ -151,7 +151,7 @@ def extract_course_number(shortname: str) -> Optional[str]:
     Example:
         >>> extract_course_number("VU 192.167 - Maths")
         '192167'
-        >>> extract_course_number("192167-2024W")
+        >>> extract_course_number("192167-2025W")
         '192167'
     """
     if not shortname:
@@ -176,8 +176,8 @@ def get_current_semester() -> str:
 
     TU Wien semesters follow this pattern:
     - Winter semester (W): October to February (spans two calendar years)
-      - Oct-Dec: Uses current year (e.g., 2024W in October 2024)
-      - Jan-Feb: Uses previous year (e.g., 2024W in January 2025)
+      - Oct-Dec: Uses current year (e.g., 2025W in October 2024)
+      - Jan-Feb: Uses previous year (e.g., 2025W in January 2025)
     - Summer semester (S): March to September (e.g., 2024S)
 
     Returns:
@@ -189,7 +189,7 @@ def get_current_semester() -> str:
         '2023W'
         >>> # If current date is October 2024
         >>> get_current_semester()
-        '2024W'
+        '2025W'
     """
     now = datetime.now()
     year = now.year
@@ -281,14 +281,14 @@ def get_tiss_course_url(course_number: str, semester: Optional[str] = None) -> s
     
     Args:
         course_number: The TISS course number (e.g., "192.167" or "192167").
-        semester: Optional semester code (e.g., "2024W"). If omitted, shows general course page.
+        semester: Optional semester code (e.g., "2025W"). If omitted, shows general course page.
         
     Returns:
         URL to the course page on TISS.
     
     Example:
-        >>> get_tiss_course_url("192.167", "2024W")
-        'https://tiss.tuwien.ac.at/course/courseDetails.xhtml?dswid=...&courseNr=192167&semester=2024W'
+        >>> get_tiss_course_url("104.633", "2025W")
+        'https://tiss.tuwien.ac.at/course/courseDetails.xhtml?dswid=...&courseNr=104633&semester=2025W'
     """
     # Remove dots from course number
     course_number = course_number.replace(".", "")

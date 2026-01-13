@@ -516,10 +516,7 @@ class InteractiveMenu:
                     Choice(value="participation", name="🎯 Exercise Participation"),
                     Choice(value="grades", name="🏆 Grade Summary"),
                     Separator("─── Advanced Features ───"),
-                    Choice(value="compare", name="📊 Compare All Courses"),
-                    Choice(value="study_time", name="⏱️ Study Time Estimator"),
                     Choice(value="export_cal", name="📅 Export Calendar"),
-                    Choice(value="submissions", name="📌 Submission Tracker"),
                     Separator(),
                     Choice(value="tiss", name="🔍 Search TISS"),
                     Separator(),
@@ -563,14 +560,8 @@ class InteractiveMenu:
                 self._show_participation_menu()
             elif action == "grades":
                 self._show_grade_summary()
-            elif action == "compare":
-                self._show_course_comparison()
-            elif action == "study_time":
-                self._show_study_time_estimate()
             elif action == "export_cal":
                 self._export_calendar()
-            elif action == "submissions":
-                self._show_submission_tracker()
             elif action == "tiss":
                 self._show_tiss_search()
 
@@ -1123,7 +1114,7 @@ class InteractiveMenu:
             rprint("[yellow]No upcoming exam registrations found for your courses.[/yellow]")
             rprint()
             rprint("[dim]This feature checks TISS for exam dates on your current TUWEL courses.[/dim]")
-            rprint("[dim]Make sure your course shortnames contain the TISS course number (e.g., '192.167').[/dim]")
+            rprint("[dim]Make sure your course shortnames contain the TISS course number (e.g., '104.633').[/dim]")
             self._wait_for_continue()
             return
 
@@ -1583,32 +1574,6 @@ class InteractiveMenu:
         
         self._wait_for_continue()
 
-    def _show_course_comparison(self):
-        """Show course comparison view."""
-        self._clear_screen()
-        self._print_header("Course Comparison")
-        
-        from tiss_tuwel_cli.cli.features import compare_courses
-        try:
-            compare_courses()
-        except Exception as e:
-            rprint(f"[red]Error: {e}[/red]")
-        
-        self._wait_for_continue()
-
-    def _show_study_time_estimate(self):
-        """Show study time estimation."""
-        self._clear_screen()
-        self._print_header("Study Time Estimator")
-        
-        from tiss_tuwel_cli.cli.features import estimate_study_time
-        try:
-            estimate_study_time()
-        except Exception as e:
-            rprint(f"[red]Error: {e}[/red]")
-        
-        self._wait_for_continue()
-
     def _export_calendar(self):
         """Export calendar to ICS."""
         self._clear_screen()
@@ -1622,18 +1587,6 @@ class InteractiveMenu:
         
         self._wait_for_continue()
 
-    def _show_submission_tracker(self):
-        """Show submission tracker."""
-        self._clear_screen()
-        self._print_header("Assignment Submission Tracker")
-        
-        from tiss_tuwel_cli.cli.features import submission_tracker
-        try:
-            submission_tracker()
-        except Exception as e:
-            rprint(f"[red]Error: {e}[/red]")
-        
-        self._wait_for_continue()
 
     def _open_vowi_for_course(self, course_title: str):
         """Open VoWi search for a course in the browser."""
@@ -1722,17 +1675,17 @@ class InteractiveMenu:
         self._print_header("TISS Course Search")
 
         def validate_course_number(text: str) -> bool:
-            """Validate TISS course number format (e.g., 192.167 or 192167)."""
+            """Validate TISS course number format (e.g., 104.633 or 104633)."""
             if not text:
                 return False
-            # Accept formats like "192.167", "192167", etc.
+            # Accept formats like "104.633", "104633", etc.
             pattern = r'^\d{3}\.?\d{3}$'
             return bool(re.match(pattern, text.strip()))
 
         course_number = inquirer.text(
-            message="Course number (e.g., 192.167):",
+            message="Course number (e.g., 104.633):",
             validate=validate_course_number,
-            invalid_message="Please enter a valid course number (e.g., 192.167)",
+            invalid_message="Please enter a valid course number (e.g., 104.633)",
         ).execute()
 
         if not course_number:
@@ -1743,7 +1696,7 @@ class InteractiveMenu:
         default_semester = f"{current_year}W" if current_month >= 9 else f"{current_year}S"
 
         semester = inquirer.text(
-            message="Semester (e.g., 2024W, 2024S):",
+            message="Semester (e.g., 2025W, 2024S):",
             default=default_semester,
         ).execute()
 
