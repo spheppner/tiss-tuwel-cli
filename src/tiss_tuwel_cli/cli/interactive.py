@@ -17,13 +17,22 @@ from InquirerPy.separator import Separator
 from rich import print as rprint
 from rich.console import Console
 from rich.panel import Panel
-from rich.prompt import Prompt
+from rich.table import Table
 
-from tiss_tuwel_cli.cli import courses, dashboard, features, get_tuwel_client, timeline, todo
+from tiss_tuwel_cli.cli import dashboard, get_tuwel_client
+from tiss_tuwel_cli.clients.tiss import TissClient
 from tiss_tuwel_cli.config import ConfigManager
+from tiss_tuwel_cli.utils import (
+    days_until,
+    extract_course_number,
+    parse_percentage,
+    strip_html,
+    timestamp_to_date,
+)
 
 console = Console()
 config = ConfigManager()
+tiss = TissClient()
 
 # Constants for time calculations and thresholds
 SECONDS_PER_DAY = 86400
