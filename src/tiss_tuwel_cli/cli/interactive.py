@@ -6,6 +6,7 @@ all CLI features in a user-friendly way with keyboard navigation.
 """
 
 import re
+from collections import defaultdict
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -18,11 +19,25 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from tiss_tuwel_cli.clients.tiss import TissClient
 from tiss_tuwel_cli.config import ConfigManager
-from tiss_tuwel_cli.utils import parse_percentage, strip_html, timestamp_to_date
+from tiss_tuwel_cli.utils import (
+    days_until,
+    extract_course_number,
+    parse_percentage,
+    strip_html,
+    timestamp_to_date,
+)
 
 console = Console()
 config = ConfigManager()
+tiss = TissClient()
+
+# Constants for time calculations and thresholds
+SECONDS_PER_DAY = 86400
+EXAM_ALERT_DAYS_BEFORE = 14  # Show alerts for registrations opening within this many days
+EXAM_ALERT_DAYS_AFTER = 7   # Show alerts for registrations that opened within this many days
+MAX_COURSES_FOR_GRADES = 5   # Limit API calls when fetching grade summaries
 
 
 class InteractiveMenu:
@@ -38,6 +53,8 @@ class InteractiveMenu:
         self._tuwel_client = None
         self._courses_cache: List[dict] = []
         self._user_info: Optional[dict] = None
+        self._exam_alerts_cache: Optional[List[dict]] = None
+        self._grade_summary_cache: Optional[Dict[str, Any]] = None
 
     def _get_tuwel_client(self):
         """Get or create the TUWEL client."""
@@ -65,6 +82,217 @@ class InteractiveMenu:
                     self._user_info = None
         return self._user_info
 
+    def _get_exam_alerts(self) -> List[dict]:
+        """
+        Fetch upcoming exam registration alerts for ongoing courses.
+        
+        Checks TISS for exam dates where registration is starting soon
+        or currently open for courses the user is enrolled in.
+        
+        Returns:
+            List of alert dictionaries with course info and registration details.
+        """
+        if self._exam_alerts_cache is not None:
+            return self._exam_alerts_cache
+        
+        self._exam_alerts_cache = []
+        
+        # Get current courses
+        client = self._get_tuwel_client()
+        if not client:
+            return []
+        
+        try:
+            courses = client.get_enrolled_courses('inprogress')
+        except Exception:
+            return []
+        
+        # For each course, try to extract course number and fetch exam dates
+        for course in courses:
+            shortname = course.get('shortname', '')
+            course_num = extract_course_number(shortname)
+            
+            if not course_num:
+                continue
+            
+            try:
+                exams = tiss.get_exam_dates(course_num)
+                if isinstance(exams, dict) and 'error' in exams:
+                    continue
+                if not isinstance(exams, list):
+                    continue
+                
+                for exam in exams:
+                    reg_start = exam.get('registrationStart')
+                    reg_end = exam.get('registrationEnd')
+                    exam_date = exam.get('date')
+                    
+                    if reg_start:
+                        days_to_reg = days_until(reg_start)
+                        days_to_exam = days_until(exam_date) if exam_date else None
+                        
+                        # Alert if registration starts within configured days
+                        # or is currently open (reg_start passed but reg_end not)
+                        if days_to_reg is not None:
+                            if -EXAM_ALERT_DAYS_AFTER <= days_to_reg <= EXAM_ALERT_DAYS_BEFORE:
+                                alert = {
+                                    'course': shortname,
+                                    'course_fullname': course.get('fullname', shortname),
+                                    'exam_date': exam_date,
+                                    'registration_start': reg_start,
+                                    'registration_end': reg_end,
+                                    'days_to_registration': days_to_reg,
+                                    'days_to_exam': days_to_exam,
+                                    'mode': exam.get('mode', 'Unknown'),
+                                }
+                                self._exam_alerts_cache.append(alert)
+            except Exception:
+                # Skip courses that fail - don't let one failure break the loop
+                continue
+        
+        # Sort by registration start date (soonest first)
+        self._exam_alerts_cache.sort(
+            key=lambda x: x.get('days_to_registration', 999)
+        )
+        
+        return self._exam_alerts_cache
+
+    def _get_weekly_overview(self) -> List[dict]:
+        """
+        Get events and deadlines for the upcoming week.
+        
+        Returns:
+            List of events happening in the next 7 days.
+        """
+        client = self._get_tuwel_client()
+        if not client:
+            return []
+        
+        try:
+            upcoming = client.get_upcoming_calendar()
+            events = upcoming.get('events', [])
+
+            # Filter to next 7 days
+            now = datetime.now().timestamp()
+            week_later = now + (7 * SECONDS_PER_DAY)
+            
+            weekly = []
+            for event in events:
+                event_time = event.get('timestart', 0)
+                if now <= event_time <= week_later:
+                    weekly.append(event)
+            
+            return weekly
+        except Exception:
+            return []
+
+    def _get_study_progress(self) -> Dict[str, Any]:
+        """
+        Calculate overall study progress across all courses.
+        
+        Returns:
+            Dictionary with progress statistics.
+        """
+        client = self._get_tuwel_client()
+        if not client:
+            return {}
+        
+        try:
+            # Get checkmarks data for completion tracking
+            checkmarks_data = client.get_checkmarks([])
+            checkmarks_list = checkmarks_data.get('checkmarks', [])
+            
+            total_checked = 0
+            total_possible = 0
+            
+            for cm in checkmarks_list:
+                examples = cm.get('examples', [])
+                total_checked += sum(1 for ex in examples if ex.get('checked'))
+                total_possible += len(examples)
+            
+            # Get assignments for pending work
+            assignments_data = client.get_assignments()
+            courses_with_assignments = assignments_data.get('courses', [])
+            
+            now = datetime.now().timestamp()
+            pending_assignments = 0
+            overdue_assignments = 0
+            
+            for course in courses_with_assignments:
+                for assign in course.get('assignments', []):
+                    due = assign.get('duedate', 0)
+                    if due > now:
+                        pending_assignments += 1
+                    elif due > now - (7 * SECONDS_PER_DAY):
+                        # Overdue within last week
+                        overdue_assignments += 1
+            
+            return {
+                'checkmarks_completed': total_checked,
+                'checkmarks_total': total_possible,
+                'checkmarks_percentage': (
+                    (total_checked / total_possible * 100) if total_possible > 0 else 0
+                ),
+                'pending_assignments': pending_assignments,
+                'overdue_assignments': overdue_assignments,
+            }
+        except Exception:
+            return {}
+
+    def _get_grade_summary(self) -> Dict[str, Any]:
+        """
+        Get a summary of grades across all courses.
+        
+        Returns:
+            Dictionary with grade statistics.
+        """
+        if self._grade_summary_cache is not None:
+            return self._grade_summary_cache
+        
+        client = self._get_tuwel_client()
+        user_id = config.get_user_id()
+        
+        if not client or not user_id:
+            return {}
+        
+        try:
+            courses = client.get_enrolled_courses('inprogress')
+
+            course_grades = []
+            for course in courses[:MAX_COURSES_FOR_GRADES]:
+                try:
+                    report = client.get_user_grades_table(course['id'], user_id)
+                    tables = report.get('tables', [])
+                    if tables:
+                        table_data = tables[0].get('tabledata', [])
+                        for item in table_data:
+                            raw_name = item.get('itemname', {}).get('content', '')
+                            clean_name = strip_html(raw_name) if raw_name else ''
+                            
+                            # Look for course total
+                            if 'gesamt' in clean_name.lower() or 'total' in clean_name.lower():
+                                percent_raw = item.get('percentage', {}).get('content', '')
+                                pct = parse_percentage(strip_html(percent_raw))
+                                if pct is not None:
+                                    course_grades.append({
+                                        'course': course.get('shortname', ''),
+                                        'percentage': pct,
+                                    })
+                                break
+                except Exception:
+                    continue
+            
+            self._grade_summary_cache = {
+                'course_grades': course_grades,
+                'average': (
+                    sum(g['percentage'] for g in course_grades) / len(course_grades)
+                    if course_grades else 0
+                ),
+            }
+            return self._grade_summary_cache
+        except Exception:
+            return {}
+
     def _clear_screen(self):
         """Clear the console screen."""
         console.clear()
@@ -85,7 +313,7 @@ class InteractiveMenu:
         console.print()
 
     def _print_smart_dashboard(self):
-        """Print an intelligent dashboard summary."""
+        """Print an intelligent dashboard summary with exam alerts and smart features."""
         client = self._get_tuwel_client()
         if not client:
             return
@@ -97,21 +325,87 @@ class InteractiveMenu:
             console.print()
 
         try:
-            # Fetch upcoming events
             with console.status("[dim]Loading dashboard...[/dim]"):
                 upcoming = client.get_upcoming_calendar()
                 events = upcoming.get('events', [])[:5]
+                exam_alerts = self._get_exam_alerts()
+                progress = self._get_study_progress()
 
+            # ============ EXAM REGISTRATION ALERTS ============
+            if exam_alerts:
+                console.print(Panel(
+                    "[bold white on red] 🎓 EXAM REGISTRATION ALERTS [/bold white on red]",
+                    expand=False,
+                    border_style="red"
+                ))
+                for alert in exam_alerts[:3]:  # Show top 3 alerts
+                    days = alert.get('days_to_registration', 0)
+                    course = alert.get('course', '')
+                    exam_date = alert.get('exam_date', 'TBD')
+                    mode = alert.get('mode', '')
+                    
+                    if days < 0:
+                        # Registration is open now
+                        status = "[bold green]OPEN NOW[/bold green]"
+                        icon = "🟢"
+                    elif days == 0:
+                        status = "[bold yellow]OPENS TODAY[/bold yellow]"
+                        icon = "🟡"
+                    elif days <= 3:
+                        status = f"[bold yellow]Opens in {days}d[/bold yellow]"
+                        icon = "🟡"
+                    else:
+                        status = f"[dim]Opens in {days}d[/dim]"
+                        icon = "📋"
+                    
+                    console.print(f"  {icon} [bold]{course}[/bold]")
+                    console.print(f"      Exam: {exam_date[:10] if exam_date else 'TBD'} ({mode})")
+                    console.print(f"      Registration: {status}")
+                console.print()
+
+            # ============ STUDY PROGRESS OVERVIEW ============
+            if progress:
+                parts = []
+                
+                if progress.get('checkmarks_total', 0) > 0:
+                    pct = progress.get('checkmarks_percentage', 0)
+                    completed = progress.get('checkmarks_completed', 0)
+                    total = progress.get('checkmarks_total', 0)
+                    
+                    if pct >= 100:
+                        bar_style = "green"
+                    elif pct >= 50:
+                        bar_style = "yellow"
+                    else:
+                        bar_style = "red"
+                    
+                    parts.append(f"[{bar_style}]✓ Checkmarks: {completed}/{total} ({pct:.0f}%)[/{bar_style}]")
+                
+                pending = progress.get('pending_assignments', 0)
+                overdue = progress.get('overdue_assignments', 0)
+                
+                if pending > 0:
+                    parts.append(f"[cyan]📝 Pending: {pending} assignments[/cyan]")
+                if overdue > 0:
+                    parts.append(f"[red]⚠️ Overdue: {overdue}[/red]")
+                
+                if parts:
+                    console.print("[bold]📊 Study Progress[/bold]")
+                    for part in parts:
+                        console.print(f"  {part}")
+                    console.print()
+
+            # ============ UPCOMING DEADLINES ============
             if events:
                 console.print("[bold]📅 Upcoming Deadlines[/bold]")
                 for event in events:
                     course = event.get('course', {}).get('shortname', '')
-                    name = event.get('name', 'Unknown')
+                    event_name = event.get('name', 'Unknown')
                     time = timestamp_to_date(event.get('timestart'))
                     # Color based on urgency
                     now = datetime.now().timestamp()
                     event_time = event.get('timestart', 0)
-                    days_left = (event_time - now) / 86400
+                    days_left = (event_time - now) / SECONDS_PER_DAY
 
                     if days_left < 1:
                         style = "bold red"
@@ -123,11 +417,66 @@ class InteractiveMenu:
                         style = "green"
                         urgency = "   "
 
-                    console.print(f"  {urgency}[{style}]{time}[/{style}] [{style}]{course}[/{style}] - {name}")
+                    console.print(
+                        f"  {urgency}[{style}]{time}[/{style}] [{style}]{course}[/{style}] - {event_name}"
+                    )
                 console.print()
+
+            # ============ SMART TIPS ============
+            tips = self._generate_smart_tips(exam_alerts, progress, events)
+            if tips:
+                console.print("[bold]💡 Tips[/bold]")
+                for tip in tips[:2]:
+                    console.print(f"  [dim]{tip}[/dim]")
+                console.print()
+
         except (requests.RequestException, KeyError, TypeError):
             # Network or parsing errors are handled gracefully - dashboard is optional
             pass
+
+    def _generate_smart_tips(
+        self,
+        exam_alerts: List[dict],
+        progress: Dict[str, Any],
+        events: List[dict]
+    ) -> List[str]:
+        """Generate context-aware tips for the student."""
+        tips = []
+        
+        # Exam-related tips
+        if exam_alerts:
+            open_registrations = [a for a in exam_alerts if a.get('days_to_registration', 0) < 0]
+            if open_registrations:
+                tips.append(
+                    f"🎓 Don't forget: {len(open_registrations)} exam registration(s) are open now!"
+                )
+        
+        # Progress-related tips
+        if progress:
+            overdue = progress.get('overdue_assignments', 0)
+            if overdue > 0:
+                tips.append(f"📚 You have {overdue} overdue assignment(s). Consider catching up!")
+            
+            pct = progress.get('checkmarks_percentage', 0)
+            if 0 < pct < 50:
+                tips.append("✏️ Keep working on your checkmarks to meet participation requirements.")
+        
+        # Deadline-related tips
+        if events:
+            now = datetime.now().timestamp()
+            urgent = [e for e in events if (e.get('timestart', 0) - now) < SECONDS_PER_DAY]
+            if urgent:
+                tips.append(f"⏰ You have {len(urgent)} deadline(s) in the next 24 hours!")
+        
+        # General tips (if no specific tips)
+        if not tips:
+            month = datetime.now().month
+            if month in [1, 2, 6, 7]:
+                tips.append("📖 Exam season! Good luck with your exams.")
+            elif month in [10, 3]:
+                tips.append("🎓 Start of semester - check your course registrations!")
+        
+        return tips
 
     def _wait_for_continue(self):
         """Wait for user to continue."""
@@ -159,8 +508,11 @@ class InteractiveMenu:
                 choices.extend([
                     Choice(value="courses", name="📚 My Courses"),
                     Choice(value="dashboard", name="📊 Dashboard"),
+                    Choice(value="exams", name="🎓 Exam Registration"),
+                    Choice(value="weekly", name="📆 This Week"),
                     Choice(value="assignments", name="📝 Assignments"),
                     Choice(value="checkmarks", name="✅ Kreuzerlübungen"),
+                    Choice(value="grades", name="🏆 Grade Summary"),
                     Choice(value="tiss", name="🔍 Search TISS"),
                     Separator(),
                 ])
@@ -189,10 +541,16 @@ class InteractiveMenu:
                 self._show_courses_menu()
             elif action == "dashboard":
                 self._show_dashboard()
+            elif action == "exams":
+                self._show_exam_registration()
+            elif action == "weekly":
+                self._show_weekly_overview()
             elif action == "assignments":
                 self._show_assignments()
             elif action == "checkmarks":
                 self._show_checkmarks()
+            elif action == "grades":
+                self._show_grade_summary()
             elif action == "tiss":
                 self._show_tiss_search()
 
@@ -515,7 +873,7 @@ class InteractiveMenu:
                     if due < now:
                         status = "[red]Closed[/red]"
                     else:
-                        days_left = (due - now) / 86400
+                        days_left = (due - now) / SECONDS_PER_DAY
                         if days_left < 1:
                             status = "[bold red]Due Soon![/bold red]"
                         elif days_left < 3:
@@ -670,6 +1028,214 @@ class InteractiveMenu:
 
             console.print(table)
             console.print()
+
+        self._wait_for_continue()
+
+    def _show_exam_registration(self):
+        """Show detailed exam registration information."""
+        self._clear_screen()
+        self._print_header("Exam Registration")
+
+        with console.status("[bold green]Fetching exam information...[/bold green]"):
+            # Force refresh of exam alerts
+            self._exam_alerts_cache = None
+            alerts = self._get_exam_alerts()
+
+        if not alerts:
+            rprint("[yellow]No upcoming exam registrations found for your courses.[/yellow]")
+            rprint()
+            rprint("[dim]This feature checks TISS for exam dates on your current TUWEL courses.[/dim]")
+            rprint("[dim]Make sure your course shortnames contain the TISS course number (e.g., '192.167').[/dim]")
+            self._wait_for_continue()
+            return
+
+        # Group by status
+        open_now = [a for a in alerts if a.get('days_to_registration', 0) < 0]
+        opening_soon = [a for a in alerts if 0 <= a.get('days_to_registration', 0) <= 7]
+        upcoming = [a for a in alerts if a.get('days_to_registration', 0) > 7]
+
+        if open_now:
+            console.print(Panel(
+                "[bold green]🟢 Registration Open Now[/bold green]",
+                expand=False
+            ))
+            table = Table(expand=True)
+            table.add_column("Course", style="white", no_wrap=False)
+            table.add_column("Exam Date", style="cyan")
+            table.add_column("Mode", style="dim")
+            table.add_column("Closes", style="yellow")
+
+            for alert in open_now:
+                reg_end = alert.get('registration_end', '')
+                closes = reg_end[:10] if reg_end else 'Unknown'
+                table.add_row(
+                    alert.get('course', ''),
+                    alert.get('exam_date', 'TBD')[:10] if alert.get('exam_date') else 'TBD',
+                    alert.get('mode', 'Unknown'),
+                    closes
+                )
+            console.print(table)
+            console.print()
+
+        if opening_soon:
+            console.print(Panel(
+                "[bold yellow]🟡 Opening This Week[/bold yellow]",
+                expand=False
+            ))
+            table = Table(expand=True)
+            table.add_column("Course", style="white", no_wrap=False)
+            table.add_column("Exam Date", style="cyan")
+            table.add_column("Opens In", style="yellow", justify="right")
+
+            for alert in opening_soon:
+                days = alert.get('days_to_registration', 0)
+                if days == 0:
+                    opens_in = "Today!"
+                else:
+                    opens_in = f"{days} days"
+                table.add_row(
+                    alert.get('course', ''),
+                    alert.get('exam_date', 'TBD')[:10] if alert.get('exam_date') else 'TBD',
+                    opens_in
+                )
+            console.print(table)
+            console.print()
+
+        if upcoming:
+            console.print(Panel(
+                "[bold dim]📋 Coming Up[/bold dim]",
+                expand=False
+            ))
+            table = Table(expand=True)
+            table.add_column("Course", style="dim", no_wrap=False)
+            table.add_column("Exam Date", style="dim")
+            table.add_column("Registration Opens", style="dim")
+
+            for alert in upcoming[:5]:
+                table.add_row(
+                    alert.get('course', ''),
+                    alert.get('exam_date', 'TBD')[:10] if alert.get('exam_date') else 'TBD',
+                    alert.get('registration_start', 'TBD')[:10] if alert.get('registration_start') else 'TBD'
+                )
+            console.print(table)
+            console.print()
+
+        rprint("[dim]💡 Tip: Visit TISS to complete your exam registration.[/dim]")
+        self._wait_for_continue()
+
+    def _show_weekly_overview(self):
+        """Show events and deadlines for the current week."""
+        self._clear_screen()
+        self._print_header("This Week")
+
+        weekly = self._get_weekly_overview()
+
+        if not weekly:
+            rprint("[yellow]No events or deadlines in the next 7 days.[/yellow]")
+            rprint()
+            rprint("[green]🎉 Enjoy your free week![/green]")
+            self._wait_for_continue()
+            return
+
+        # Group by day
+        by_day: Dict[str, List[dict]] = defaultdict(list)
+
+        for event in weekly:
+            event_time = event.get('timestart', 0)
+            day = datetime.fromtimestamp(event_time).strftime('%A, %b %d')
+            by_day[day].append(event)
+
+        now = datetime.now().timestamp()
+
+        for day, events in by_day.items():
+            console.print(f"[bold cyan]📅 {day}[/bold cyan]")
+            for event in events:
+                course = event.get('course', {}).get('shortname', '')
+                event_name = event.get('name', 'Unknown')
+                event_time = event.get('timestart', 0)
+                time_str = datetime.fromtimestamp(event_time).strftime('%H:%M')
+
+                days_left = (event_time - now) / SECONDS_PER_DAY
+                if days_left < 1:
+                    style = "bold red"
+                elif days_left < 2:
+                    style = "yellow"
+                else:
+                    style = "white"
+
+                console.print(f"   [{style}]{time_str}[/{style}] [{style}]{course}[/{style}] - {event_name}")
+            console.print()
+
+        # Summary
+        total = len(weekly)
+        urgent = sum(1 for e in weekly if (e.get('timestart', 0) - now) < SECONDS_PER_DAY)
+        rprint(f"[dim]Total: {total} events/deadlines this week")
+        if urgent > 0:
+            rprint(f"[bold red]⚠️ {urgent} in the next 24 hours![/bold red]")
+
+        self._wait_for_continue()
+
+    def _show_grade_summary(self):
+        """Show a summary of grades across all courses."""
+        self._clear_screen()
+        self._print_header("Grade Summary")
+
+        with console.status("[bold green]Fetching grades...[/bold green]"):
+            # Force refresh
+            self._grade_summary_cache = None
+            summary = self._get_grade_summary()
+
+        course_grades = summary.get('course_grades', [])
+        avg = summary.get('average', 0)
+
+        if not course_grades:
+            rprint("[yellow]No grade data found for your current courses.[/yellow]")
+            rprint()
+            rprint("[dim]Grades will appear here once they are published in TUWEL.[/dim]")
+            self._wait_for_continue()
+            return
+
+        console.print(Panel(
+            f"[bold]📊 Overall Average: {avg:.1f}%[/bold]",
+            expand=False,
+            border_style="green" if avg >= 70 else "yellow" if avg >= 50 else "red"
+        ))
+        console.print()
+
+        table = Table(title="Course Grades", expand=True)
+        table.add_column("Course", style="white", no_wrap=False)
+        table.add_column("Grade %", justify="right")
+        table.add_column("Status", justify="center")
+
+        for grade in course_grades:
+            pct = grade.get('percentage', 0)
+            course = grade.get('course', '')
+
+            if pct >= 87.5:
+                status = "[bold green]Excellent (1)[/bold green]"
+                pct_style = "green"
+            elif pct >= 75:
+                status = "[green]Good (2)[/green]"
+                pct_style = "green"
+            elif pct >= 62.5:
+                status = "[yellow]Satisfactory (3)[/yellow]"
+                pct_style = "yellow"
+            elif pct >= 50:
+                status = "[yellow]Sufficient (4)[/yellow]"
+                pct_style = "yellow"
+            else:
+                status = "[red]Fail (5)[/red]"
+                pct_style = "red"
+
+            table.add_row(
+                course,
+                f"[{pct_style}]{pct:.1f}%[/{pct_style}]",
+                status
+            )
+
+        console.print(table)
+        console.print()
+        rprint(f"[dim]📊 Showing grades from {len(course_grades)} course(s)[/dim]")
 
         self._wait_for_continue()
 
