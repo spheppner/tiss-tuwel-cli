@@ -35,28 +35,41 @@ def main(
         "-i",
         help="Start in interactive menu mode",
     ),
+    help_flag: bool = typer.Option(
+        False,
+        "--help",
+        "-h",
+        help="Show help message",
+    ),
 ):
     """
     TU Wien Companion - TISS & TUWEL CLI.
-    
-    Use -i or --interactive to start in interactive menu mode.
+
+    Run without arguments to start an interactive shell.
+    Use -i or --interactive to start in menu mode.
     """
-    if interactive:
+    if help_flag and ctx.invoked_subcommand is None:
+        # Show help if explicitly requested
+        rprint(ctx.get_help())
+        raise typer.Exit()
+    elif interactive:
         from tiss_tuwel_cli.cli.interactive import interactive as run_interactive
         run_interactive()
         raise typer.Exit()
     elif ctx.invoked_subcommand is None:
-        # No command and no interactive flag - show help
-        rprint(ctx.get_help())
+        # No command and no interactive flag - start shell mode
+        from tiss_tuwel_cli.cli.shell import start_shell
+        start_shell()
+        raise typer.Exit()
 
 
 def get_tuwel_client() -> TuwelClient:
     """
     Get an authenticated TUWEL client.
-    
+
     Returns:
         An authenticated TuwelClient instance.
-        
+
     Raises:
         typer.Exit: If no TUWEL token is configured.
     """
