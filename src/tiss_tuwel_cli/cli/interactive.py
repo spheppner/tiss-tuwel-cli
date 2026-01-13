@@ -507,6 +507,7 @@ class InteractiveMenu:
             if self._is_authenticated():
                 choices.extend([
                     Choice(value="courses", name="📚 My Courses"),
+                    Choice(value="unified", name="🔗 Unified Course View (TISS+TUWEL)"),
                     Choice(value="dashboard", name="📊 Dashboard"),
                     Choice(value="exams", name="🎓 Exam Registration"),
                     Choice(value="weekly", name="📆 This Week"),
@@ -544,6 +545,8 @@ class InteractiveMenu:
                 break
             elif action == "login":
                 self._show_login_menu()
+            elif action == "unified":
+                self._show_unified_view()
             elif action == "courses":
                 self._show_courses_menu()
             elif action == "dashboard":
@@ -714,7 +717,7 @@ class InteractiveMenu:
                 self._show_course_details(selected)
 
     def _show_course_details(self, course: dict):
-        """Show details and actions for a specific course."""
+        """Show details and actions for a specific course with TISS integration."""
         course_id = course.get('id')
         course_name = course.get('fullname', 'Unknown Course')
         shortname = course.get('shortname', '')
@@ -723,22 +726,74 @@ class InteractiveMenu:
             self._clear_screen()
             self._print_header(shortname or "Course Details")
 
-            console.print(Panel(
-                f"[bold]{course_name}[/bold]\n"
-                f"[dim]Course ID: {course_id}[/dim]",
-                title="📚 Course Information"
-            ))
+            # Build course info panel with TISS data if available
+            info_text = f"[bold]{course_name}[/bold]\n"
+            info_text += f"[dim]Course ID: {course_id}[/dim]"
+            
+            # Try to extract course number and fetch TISS data
+            course_num = extract_course_number(shortname)
+            tiss_data = None
+            if course_num:
+                try:
+                    from tiss_tuwel_cli.utils import get_current_semester
+                    semester = get_current_semester()
+                    tiss_data = tiss.get_course_details(course_num, semester)
+                    
+                    if tiss_data and 'error' not in tiss_data:
+                        info_text += f"\n[dim]TISS Number: {course_num}[/dim]"
+                        
+                        # Add ECTS and type info
+                        ects = tiss_data.get('ects')
+                        course_type = tiss_data.get('courseType', {})
+                        type_name = course_type.get('name') if isinstance(course_type, dict) else None
+                        
+                        if ects:
+                            info_text += f"\n💎 ECTS: [cyan]{ects}[/cyan]"
+                        if type_name:
+                            info_text += f" | Type: [cyan]{type_name}[/cyan]"
+                except Exception:
+                    # Silently ignore TISS fetch errors
+                    pass
+
+            console.print(Panel(info_text, title="📚 Course Information"))
             console.print()
+            
+            # Show exam dates if available
+            if course_num and tiss_data:
+                try:
+                    exams = tiss.get_exam_dates(course_num)
+                    if isinstance(exams, list) and exams:
+                        console.print("[bold]📅 Upcoming Exams:[/bold]")
+                        for exam in exams[:3]:  # Show up to 3 exams
+                            exam_date = exam.get('date', 'N/A')
+                            mode = exam.get('mode', 'Unknown')
+                            console.print(f"  • {exam_date} - {mode}")
+                        console.print()
+                except Exception:
+                    pass
+
+            # Build action menu with new options
+            choices = [
+                Choice(value="grades", name="📊 View Grades"),
+                Choice(value="assignments", name="📝 View Assignments"),
+                Choice(value="download", name="📥 Download Materials"),
+                Separator("─── External Links ───"),
+                Choice(value="vowi", name="📖 Open in VoWi"),
+                Choice(value="tuwel", name="🌐 Open in TUWEL"),
+            ]
+            
+            # Add TISS link if course number is available
+            if course_num:
+                choices.append(Choice(value="tiss", name="🔍 Open in TISS"))
+            
+            choices.extend([
+                Separator(),
+                Choice(value="back", name="← Back"),
+            ])
 
             action = inquirer.select(
                 message="What would you like to do?",
-                choices=[
-                    Choice(value="grades", name="📊 View Grades"),
-                    Choice(value="assignments", name="📝 View Assignments"),
-                    Choice(value="download", name="📥 Download Materials"),
-                    Separator(),
-                    Choice(value="back", name="← Back"),
-                ],
+                choices=choices,
                 pointer="→",
                 qmark="",
             ).execute()
@@ -751,6 +806,12 @@ class InteractiveMenu:
                 self._show_course_assignments(course_id, course_name)
             elif action == "download":
                 self._download_course_materials(course_id)
+            elif action == "vowi":
+                self._open_vowi_for_course(course_name)
+            elif action == "tuwel":
+                self._open_tuwel_course(course_id)
+            elif action == "tiss" and course_num:
+                self._open_tiss_course(course_num)
 
     def _show_course_grades(self, course_id: int):
         """Show grades for a specific course in a clean table format."""
@@ -1141,13 +1202,49 @@ class InteractiveMenu:
         self._wait_for_continue()
 
     def _show_weekly_overview(self):
-        """Show events and deadlines for the current week."""
+        """Show events and deadlines for the current week, including exam dates."""
         self._clear_screen()
         self._print_header("This Week")
 
-        weekly = self._get_weekly_overview()
+        with console.status("[bold green]Fetching weekly events...[/bold green]"):
+            weekly = self._get_weekly_overview()
+            
+            # Also get exam alerts that fall in this week
+            exam_alerts = self._get_exam_alerts()
 
-        if not weekly:
+        all_events = []
+        
+        # Add TUWEL events
+        for event in weekly:
+            all_events.append({
+                'type': 'tuwel',
+                'name': event.get('name', 'Unknown'),
+                'course': event.get('course', {}).get('shortname', ''),
+                'timestart': event.get('timestart', 0),
+                'source': '📚 TUWEL'
+            })
+        
+        # Add exam dates from TISS that are within this week
+        now = datetime.now().timestamp()
+        week_later = now + (7 * SECONDS_PER_DAY)
+        
+        for alert in exam_alerts:
+            exam_date_str = alert.get('exam_date')
+            if exam_date_str:
+                try:
+                    exam_time = datetime.fromisoformat(exam_date_str.replace('Z', '+00:00')).replace(tzinfo=None).timestamp()
+                    if now <= exam_time <= week_later:
+                        all_events.append({
+                            'type': 'exam',
+                            'name': f"Exam - {alert.get('mode', 'Unknown')}",
+                            'course': alert.get('course', ''),
+                            'timestart': exam_time,
+                            'source': '🎓 TISS Exam'
+                        })
+                except Exception:
+                    pass
+
+        if not all_events:
             rprint("[yellow]No events or deadlines in the next 7 days.[/yellow]")
             rprint()
             rprint("[green]🎉 Enjoy your free week![/green]")
@@ -1157,36 +1254,56 @@ class InteractiveMenu:
         # Group by day
         by_day: Dict[str, List[dict]] = defaultdict(list)
 
-        for event in weekly:
+        for event in sorted(all_events, key=lambda x: x['timestart']):
             event_time = event.get('timestart', 0)
             day = datetime.fromtimestamp(event_time).strftime('%A, %b %d')
             by_day[day].append(event)
 
-        now = datetime.now().timestamp()
-
+        # Display events grouped by day
         for day, events in by_day.items():
             console.print(f"[bold cyan]📅 {day}[/bold cyan]")
             for event in events:
-                course = event.get('course', {}).get('shortname', '')
                 event_name = event.get('name', 'Unknown')
+                course = event.get('course', '')
                 event_time = event.get('timestart', 0)
                 time_str = datetime.fromtimestamp(event_time).strftime('%H:%M')
+                source = event.get('source', '')
+                event_type = event.get('type', '')
 
                 days_left = (event_time - now) / SECONDS_PER_DAY
-                if days_left < 1:
+                
+                # Different styling for exams vs regular events
+                if event_type == 'exam':
+                    style = "bold magenta"
+                    icon = "🎓"
+                elif days_left < 1:
                     style = "bold red"
+                    icon = "🔥"
                 elif days_left < 2:
                     style = "yellow"
+                    icon = "⏰"
                 else:
                     style = "white"
+                    icon = "📌"
 
-                console.print(f"   [{style}]{time_str}[/{style}] [{style}]{course}[/{style}] - {event_name}")
+                console.print(
+                    f"   {icon} [{style}]{time_str}[/{style}] "
+                    f"[{style}]{course}[/{style}] - {event_name} "
+                    f"[dim]({source})[/dim]"
+                )
             console.print()
 
         # Summary
-        total = len(weekly)
-        urgent = sum(1 for e in weekly if (e.get('timestart', 0) - now) < SECONDS_PER_DAY)
-        rprint(f"[dim]Total: {total} events/deadlines this week")
+        total = len(all_events)
+        urgent = sum(1 for e in all_events if (e.get('timestart', 0) - now) < SECONDS_PER_DAY)
+        exams = sum(1 for e in all_events if e.get('type') == 'exam')
+        
+        summary_text = f"[dim]Total: {total} events/deadlines this week"
+        if exams > 0:
+            summary_text += f" | {exams} exam(s)"
+        summary_text += "[/dim]"
+        
+        rprint(summary_text)
         if urgent > 0:
             rprint(f"[bold red]⚠️ {urgent} in the next 24 hours![/bold red]")
 
@@ -1513,6 +1630,87 @@ class InteractiveMenu:
         from tiss_tuwel_cli.cli.features import submission_tracker
         try:
             submission_tracker()
+        except Exception as e:
+            rprint(f"[red]Error: {e}[/red]")
+        
+        self._wait_for_continue()
+
+    def _open_vowi_for_course(self, course_title: str):
+        """Open VoWi search for a course in the browser."""
+        import webbrowser
+        from tiss_tuwel_cli.utils import get_vowi_search_url
+        
+        self._clear_screen()
+        self._print_header("Open VoWi")
+        
+        url = get_vowi_search_url(course_title)
+        console.print(f"[cyan]Opening VoWi search for:[/cyan] {course_title}")
+        console.print(f"[dim]URL: {url}[/dim]")
+        console.print()
+        
+        try:
+            webbrowser.open(url)
+            console.print("[green]✓ Opened in browser[/green]")
+        except Exception as e:
+            console.print(f"[red]Error opening browser: {e}[/red]")
+            console.print(f"[yellow]Please open this URL manually:[/yellow] {url}")
+        
+        self._wait_for_continue()
+
+    def _open_tuwel_course(self, course_id: int):
+        """Open TUWEL course page in the browser."""
+        import webbrowser
+        from tiss_tuwel_cli.utils import get_tuwel_course_url
+        
+        self._clear_screen()
+        self._print_header("Open TUWEL Course")
+        
+        url = get_tuwel_course_url(course_id)
+        console.print(f"[cyan]Opening TUWEL course page...[/cyan]")
+        console.print(f"[dim]URL: {url}[/dim]")
+        console.print()
+        
+        try:
+            webbrowser.open(url)
+            console.print("[green]✓ Opened in browser[/green]")
+        except Exception as e:
+            console.print(f"[red]Error opening browser: {e}[/red]")
+            console.print(f"[yellow]Please open this URL manually:[/yellow] {url}")
+        
+        self._wait_for_continue()
+
+    def _open_tiss_course(self, course_number: str):
+        """Open TISS course page in the browser."""
+        import webbrowser
+        from tiss_tuwel_cli.utils import get_tiss_course_url, get_current_semester
+        
+        self._clear_screen()
+        self._print_header("Open TISS Course")
+        
+        semester = get_current_semester()
+        url = get_tiss_course_url(course_number, semester)
+        console.print(f"[cyan]Opening TISS course page...[/cyan]")
+        console.print(f"[dim]Course: {course_number}, Semester: {semester}[/dim]")
+        console.print(f"[dim]URL: {url}[/dim]")
+        console.print()
+        
+        try:
+            webbrowser.open(url)
+            console.print("[green]✓ Opened in browser[/green]")
+        except Exception as e:
+            console.print(f"[red]Error opening browser: {e}[/red]")
+            console.print(f"[yellow]Please open this URL manually:[/yellow] {url}")
+        
+        self._wait_for_continue()
+
+    def _show_unified_view(self):
+        """Show unified TISS+TUWEL course view."""
+        self._clear_screen()
+        self._print_header("Unified Course View (TISS + TUWEL)")
+        
+        from tiss_tuwel_cli.cli.features import unified_course_view
+        try:
+            unified_course_view()
         except Exception as e:
             rprint(f"[red]Error: {e}[/red]")
         

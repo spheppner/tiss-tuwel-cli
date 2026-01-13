@@ -83,6 +83,7 @@ app.command()(courses.download)
 app.command()(courses.tiss_course)
 app.command(name="track-participation")(courses.track_participation)
 app.command(name="participation-stats")(courses.participation_stats)
+app.command(name="open-vowi")(courses.open_vowi)
 
 # Register new feature commands
 app.command(name="export-calendar")(features.export_calendar)
@@ -90,6 +91,7 @@ app.command(name="course-stats")(features.course_statistics)
 app.command(name="study-time")(features.estimate_study_time)
 app.command(name="compare-courses")(features.compare_courses)
 app.command(name="submission-tracker")(features.submission_tracker)
+app.command(name="unified-view")(features.unified_course_view)
 
 
 __all__ = ["app", "console", "config", "tiss", "get_tuwel_client"]
