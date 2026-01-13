@@ -5,7 +5,6 @@ This module provides commands for listing courses, assignments,
 grades, checkmarks, and downloading course materials.
 """
 
-import re
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -18,7 +17,7 @@ from rich.text import Text
 from rich.tree import Tree
 
 from tiss_tuwel_cli.clients.tiss import TissClient
-from tiss_tuwel_cli.utils import timestamp_to_date
+from tiss_tuwel_cli.utils import strip_html, timestamp_to_date
 
 console = Console()
 tiss = TissClient()
@@ -38,7 +37,7 @@ def courses(classification: str = 'inprogress'):
     """
     # Import here to avoid circular imports
     from tiss_tuwel_cli.cli import get_tuwel_client
-    
+
     client = get_tuwel_client()
     with console.status(f"[bold green]Fetching {classification} courses...[/bold green]"):
         enrolled_courses = client.get_enrolled_courses(classification)
@@ -62,7 +61,7 @@ def assignments():
     """
     # Import here to avoid circular imports
     from tiss_tuwel_cli.cli import get_tuwel_client
-    
+
     client = get_tuwel_client()
     with console.status("[bold green]Fetching assignments...[/bold green]"):
         data = client.get_assignments()
@@ -102,8 +101,8 @@ def grades(course_id: Optional[int] = None):
         course_id: The Moodle course ID to show grades for.
     """
     # Import here to avoid circular imports
-    from tiss_tuwel_cli.cli import get_tuwel_client, config
-    
+    from tiss_tuwel_cli.cli import config, get_tuwel_client
+
     client = get_tuwel_client()
     user_id = config.get_user_id()
 
@@ -130,15 +129,18 @@ def grades(course_id: Optional[int] = None):
         # Extract text from the itemname dictionary
         raw_name = item.get('itemname', {}).get('content', 'Unknown')
 
-        # Basic HTML stripping
-        clean_name = raw_name.replace('<span class="gradeitemheader" title="', '').split('"')[0]
-        if "class" in str(item.get('itemname')):
-            clean_name = re.sub('<[^<]+?>', '', raw_name).strip()
+        # Clean HTML from the name
+        clean_name = strip_html(raw_name)
 
-        # Grade Values
-        grade_val = item.get('grade', {}).get('content', '-').replace('&nbsp;', '')
-        percent_val = item.get('percentage', {}).get('content', '-').replace('&nbsp;', '')
-        range_val = item.get('range', {}).get('content', '-').replace('&nbsp;', '')
+        # Grade Values - clean HTML from all values
+        grade_raw = item.get('grade', {}).get('content', '-')
+        grade_val = strip_html(grade_raw) if grade_raw else '-'
+
+        percent_raw = item.get('percentage', {}).get('content', '-')
+        percent_val = strip_html(percent_raw) if percent_raw else '-'
+
+        range_raw = item.get('range', {}).get('content', '-')
+        range_val = strip_html(range_raw) if range_raw else '-'
 
         # Formatting based on item type
         if "gesamt" in clean_name.lower() or "total" in clean_name.lower():
@@ -171,7 +173,7 @@ def checkmarks():
     """
     # Import here to avoid circular imports
     from tiss_tuwel_cli.cli import get_tuwel_client
-    
+
     client = get_tuwel_client()
 
     with console.status("[bold green]Looking for checkmark exercises...[/bold green]"):
@@ -228,7 +230,7 @@ def download(course_id: int):
     """
     # Import here to avoid circular imports
     from tiss_tuwel_cli.cli import get_tuwel_client
-    
+
     client = get_tuwel_client()
 
     # Fetch course contents

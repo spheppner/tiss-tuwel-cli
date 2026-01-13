@@ -33,7 +33,7 @@ class TuwelClient:
         >>> for course in courses:
         ...     print(course['fullname'])
     """
-    
+
     BASE_URL = "https://tuwel.tuwien.ac.at/webservice/rest/server.php"
 
     def __init__(self, token: str, timeout: int = 15):

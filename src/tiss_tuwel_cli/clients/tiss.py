@@ -29,9 +29,9 @@ class TissClient:
         >>> course = client.get_course_details("192.167", "2024W")
         >>> exams = client.get_exam_dates("192.167")
     """
-    
+
     BASE_URL = "https://tiss.tuwien.ac.at/api"
-    
+
     def __init__(self, timeout: int = 10):
         """
         Initialize the TISS client.
@@ -56,9 +56,17 @@ class TissClient:
         try:
             response = requests.get(url, params=params, timeout=self.timeout)
             response.raise_for_status()
+
+            # Handle empty responses
+            if not response.content or not response.text.strip():
+                return {"error": "Empty response from TISS API"}
+
             return response.json()
         except requests.RequestException as e:
             return {"error": str(e)}
+        except ValueError as e:
+            # JSONDecodeError is a subclass of ValueError
+            return {"error": f"Invalid JSON response: {str(e)}"}
 
     def get_course_details(self, course_number: str, semester: str) -> Dict[str, Any]:
         """

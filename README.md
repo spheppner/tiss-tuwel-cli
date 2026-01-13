@@ -50,6 +50,19 @@ pip install -e ".[dev]"
 
 ## Usage
 
+### Interactive Mode
+
+For a user-friendly menu-based experience, start the CLI in interactive mode:
+
+```bash
+tiss-tuwel-cli -i
+# or
+tiss-tuwel-cli --interactive
+```
+
+This provides a clean, navigable menu to access all features, browse courses,
+view grades, and more.
+
 ### Authentication
 
 First, you need to authenticate with TUWEL:
@@ -117,7 +130,8 @@ tiss-tuwel-cli/
 │           ├── __init__.py      # CLI app initialization
 │           ├── auth.py          # Authentication commands
 │           ├── dashboard.py     # Dashboard command
-│           └── courses.py       # Course-related commands
+│           ├── courses.py       # Course-related commands
+│           └── interactive.py   # Interactive menu mode
 ├── pyproject.toml               # Project configuration & dependencies
 └── README.md
 ```
