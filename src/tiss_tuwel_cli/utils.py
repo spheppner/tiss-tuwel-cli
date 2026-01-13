@@ -133,3 +133,101 @@ def parse_percentage(percent_str: str) -> Optional[float]:
         return float(cleaned)
     except ValueError:
         return None
+
+
+def extract_course_number(shortname: str) -> Optional[str]:
+    """
+    Extract a TISS course number from a TUWEL course shortname.
+    
+    TUWEL course shortnames often contain the TISS course number in various formats
+    like "192.167-2024W" or "VU 192.167" or just embedded in the name.
+    
+    Args:
+        shortname: The TUWEL course shortname.
+        
+    Returns:
+        The course number in format "XXXXXX" (6 digits) or None if not found.
+    
+    Example:
+        >>> extract_course_number("VU 192.167 - Maths")
+        '192167'
+        >>> extract_course_number("192167-2024W")
+        '192167'
+    """
+    if not shortname:
+        return None
+    
+    # Pattern 1: Match XXX.XXX format
+    match = re.search(r'(\d{3})\.(\d{3})', shortname)
+    if match:
+        return match.group(1) + match.group(2)
+    
+    # Pattern 2: Match XXXXXX format (6 consecutive digits)
+    match = re.search(r'\b(\d{6})\b', shortname)
+    if match:
+        return match.group(1)
+    
+    return None
+
+
+def get_current_semester() -> str:
+    """
+    Get the current semester code based on the current date.
+    
+    TU Wien semesters:
+    - Winter semester (W): October - February
+    - Summer semester (S): March - September
+    
+    Returns:
+        Semester code in format "YYYYS" or "YYYYW".
+    
+    Example:
+        >>> # If current date is January 2024
+        >>> get_current_semester()
+        '2023W'
+        >>> # If current date is October 2024
+        >>> get_current_semester()
+        '2024W'
+    """
+    now = datetime.now()
+    year = now.year
+    month = now.month
+    
+    if month >= 10:
+        # October onwards is winter semester of this year
+        return f"{year}W"
+    elif month >= 3:
+        # March to September is summer semester
+        return f"{year}S"
+    else:
+        # January to February is still winter semester of previous year
+        return f"{year - 1}W"
+
+
+def days_until(date_str: str) -> Optional[int]:
+    """
+    Calculate days until a given date string.
+    
+    Args:
+        date_str: Date in ISO format (YYYY-MM-DD) or datetime format.
+        
+    Returns:
+        Number of days until the date, or None if parsing fails.
+        Negative values mean the date is in the past.
+    """
+    if not date_str:
+        return None
+    
+    try:
+        # Try parsing ISO date
+        if 'T' in date_str:
+            target = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+            target = target.replace(tzinfo=None)
+        else:
+            target = datetime.strptime(date_str[:10], '%Y-%m-%d')
+        
+        now = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        delta = target - now
+        return delta.days
+    except (ValueError, AttributeError):
+        return None
