@@ -12,7 +12,7 @@ from rich.panel import Panel
 
 from tiss_tuwel_cli.cli import get_tuwel_client
 from tiss_tuwel_cli.clients.tiss import TissClient
-from tiss_tuwel_cli.utils import extract_course_number, timestamp_to_date
+from tiss_tuwel_cli.utils import extract_course_number, timestamp_to_date, format_course_name
 
 console = Console()
 
@@ -46,7 +46,8 @@ def timeline(export: bool = False, output: Optional[str] = None):
                 if isinstance(exams, list):
                     for exam in exams:
                         # Enrich with course info
-                        exam['course_name'] = course.get('fullname', shortname)
+                        fullname = course.get('fullname', shortname)
+                        exam['course_name'] = format_course_name(fullname, course_num)
                         exam['course_short'] = shortname
                         exam['source'] = 'TISS'
                         tiss_exams.append(exam)
@@ -58,11 +59,17 @@ def timeline(export: bool = False, output: Optional[str] = None):
     for event in tuwel_events:
         start_ts = event.get('timestart', 0)
         course = event.get('course', {})
+
+        shortname = course.get('shortname', '')
+        fullname = course.get('fullname', 'Unknown Course')
+        course_num = extract_course_number(shortname)
+        course_name = format_course_name(fullname, course_num)
+
         timeline_events.append({
             'timestamp': start_ts,
             'date_str': timestamp_to_date(start_ts),
             'name': event.get('name', 'Unknown Event'),
-            'course': course.get('fullname', 'Unknown Course'),
+            'course': course_name,
             'source': 'TUWEL',
             'raw': event
         })

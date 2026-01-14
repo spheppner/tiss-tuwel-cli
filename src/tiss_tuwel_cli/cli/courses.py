@@ -15,10 +15,64 @@ from rich.panel import Panel
 from rich.table import Table
 
 from tiss_tuwel_cli.clients.tiss import TissClient
-from tiss_tuwel_cli.utils import parse_percentage, strip_html, timestamp_to_date
+from tiss_tuwel_cli.utils import parse_percentage, strip_html, timestamp_to_date, format_course_name, extract_course_number
 
 console = Console()
 tiss = TissClient()
+
+
+def _resolve_course_names(client, course_ids: list[int]) -> dict[int, str]:
+    """
+    Smartly resolve course names for a list of IDs.
+    
+    1. Checks 'inprogress' courses (fast cache).
+    2. Fetches specific missing courses from API (robust).
+    3. Formats all names consistently.
+    """
+    from tiss_tuwel_cli.utils import format_course_name, extract_course_number
+
+    resolved = {}
+    missing_ids = set(course_ids)
+
+    # 1. Try in-progress courses (cheap)
+    try:
+        current_courses = client.get_enrolled_courses('inprogress')
+        for c in current_courses:
+            cid = c.get('id')
+            if cid in missing_ids:
+                short = c.get('shortname', '')
+                full = c.get('fullname', f"Course {cid}")
+                num = extract_course_number(short)
+                resolved[cid] = format_course_name(full, num)
+                missing_ids.remove(cid)
+    except Exception:
+        pass
+
+    # 2. Fetch specific missing courses (exact)
+    # 2. Fetch specific missing courses (exact)
+    if missing_ids:
+        try:
+            # list(missing_ids) is important, set is not JSON serializable
+            ids_list = list(missing_ids)
+            fetched = client.get_courses(ids_list)
+
+            for c in fetched:
+                cid = c.get('id')
+                if cid:
+                    cid = int(cid)  # ensure int
+                    short = c.get('shortname', '')
+                    full = c.get('fullname', f"Course {cid}")
+                    num = extract_course_number(short)
+                    resolved[cid] = format_course_name(full, num)
+        except Exception:
+            pass
+
+    # 3. Fallback for any still missing
+    for cid in course_ids:
+        if cid not in resolved:
+            resolved[cid] = f"Course {cid}"
+
+    return resolved
 
 
 def courses(classification: str = 'inprogress'):
@@ -47,20 +101,25 @@ def courses(classification: str = 'inprogress'):
 
     for course in enrolled_courses:
         # Show full title prominently, shortname as code, ID for reference
+        shortname = course.get('shortname', '')
+        fullname = course.get('fullname', 'Unknown Course')
+        course_num = extract_course_number(shortname)
+        display_name = format_course_name(fullname, course_num)
+
         table.add_row(
-            course.get('fullname', 'Unknown Course'),
-            course.get('shortname', '-'),
+            display_name,
+            shortname,
             str(course.get('id'))
         )
     console.print(table)
 
 
-def assignments():
+def assignments(course_id: Optional[int] = None):
     """
     List assignments.
     
-    Shows all assignments from enrolled courses, including their
-    due dates and current status.
+    Shows all assignments from enrolled courses, or for a specific course
+    if course_id is provided.
     """
     # Import here to avoid circular imports
     from tiss_tuwel_cli.cli import get_tuwel_client
@@ -77,9 +136,19 @@ def assignments():
     table.add_column("Status", style="yellow")
 
     now = datetime.now().timestamp()
+    found_any = False
+
     for course in courses_with_assignments:
+        cid = course.get('id')
+        if course_id and cid != course_id:
+            continue
+
+        found_any = True
         # Use full course name instead of shortname
-        course_name = course.get('fullname', course.get('shortname', 'Unknown'))
+        shortname = course.get('shortname', '')
+        fullname = course.get('fullname', shortname or 'Unknown')
+        course_num = extract_course_number(shortname)
+        display_name = format_course_name(fullname, course_num)
         for assign in course.get('assignments', []):
             due = assign.get('duedate', 0)
             if due < now - (30 * 86400):
@@ -87,7 +156,7 @@ def assignments():
 
             status = "Closed" if due < now else "Open"
             table.add_row(
-                course_name,
+                display_name,
                 assign.get('name'),
                 timestamp_to_date(due),
                 status
@@ -126,8 +195,15 @@ def grades(course_id: Optional[int] = None):
 
     table_data = tables[0].get('tabledata', [])
 
+    table_data = tables[0].get('tabledata', [])
+
+    course_id = int(course_id)
+    # Smartly resolve course name
+    course_names = _resolve_course_names(client, [course_id])
+    display_name = course_names.get(course_id, f"Course {course_id}")
+
     # Create a clean table
-    table = Table(title=f"Grades for Course {course_id}", expand=True)
+    table = Table(title=f"Grades for {display_name}", expand=True)
     table.add_column("Item", style="white", no_wrap=False)
     table.add_column("Grade", justify="right", style="cyan")
     table.add_column("Range", justify="center", style="dim")
@@ -214,9 +290,10 @@ def checkmarks():
             checkmarks_data = client.get_checkmarks([])
             checkmarks_list = checkmarks_data.get('checkmarks', [])
             # Also fetch course list to get course names
-            courses = client.get_enrolled_courses('inprogress')
-            course_names = {c.get('id'): c.get('fullname', f"Course {c.get('id')}")
-                            for c in courses}
+            # Use smart resolver for all checkmark courses
+            # Ensure IDs are ints
+            all_course_ids = list(set(int(cm.get('course')) for cm in checkmarks_list if cm.get('course')))
+            course_names = _resolve_course_names(client, all_course_ids)
         except Exception as e:
             rprint(f"[bold red]Error fetching checkmarks:[/bold red] {e}")
             rprint("[dim]This may be due to a bug in the mod_checkmark plugin on TUWEL.[/dim]")
@@ -230,6 +307,9 @@ def checkmarks():
     courses_data: Dict[int, Dict[str, Any]] = {}
     for cm in checkmarks_list:
         course_id = cm.get('course')
+        if course_id:
+            course_id = int(course_id)
+
         if course_id not in courses_data:
             courses_data[course_id] = {
                 'exercises': [],
@@ -426,7 +506,10 @@ def track_participation(
         course_name = None
         for course in courses:
             if course.get('id') == course_id:
-                course_name = course.get('fullname', f'Course {course_id}')
+                short = course.get('shortname', '')
+                full = course.get('fullname', f'Course {course_id}')
+                num = extract_course_number(short)
+                course_name = format_course_name(full, num)
                 break
 
         if not course_name:

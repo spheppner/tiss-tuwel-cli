@@ -6,6 +6,7 @@ TUWEL authentication tokens.
 """
 
 import time
+
 import typer
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 from rich import print as rprint
@@ -23,9 +24,9 @@ config = ConfigManager()
 
 
 def login(
-    manual: bool = typer.Option(False, "--manual", help="Start manual login by pasting a token URL instead of automating."),
-    hybrid: bool = typer.Option(False, "--hybrid", help="Open browser for manual login, auto-capture token."),
-    debug: bool = typer.Option(False, "--debug", help="Enable debug mode with non-headless browser and verbose logs.")
+        manual: bool = typer.Option(False, "--manual", help="Start manual login by pasting a token URL instead of automating."),
+        hybrid: bool = typer.Option(False, "--hybrid", help="Open browser for manual login, auto-capture token."),
+        debug: bool = typer.Option(False, "--debug", help="Enable debug mode with non-headless browser and verbose logs.")
 ):
     """
     [Automated] Launches a browser to log in and captures the TUWEL token automatically.
@@ -37,7 +38,7 @@ def login(
     if manual:
         manual_login()
         return
-    
+
     if hybrid:
         hybrid_login()
         return
@@ -157,7 +158,6 @@ def _run_playwright_login_internal(user: str, passw: str, debug: bool) -> bool:
                     raise e
                 if debug:
                     rprint(f"[magenta]Ignoring expected error: {e}[/magenta]")
-
 
             # Wait for the on_request handler to capture the token, polling instead of static wait
             wait_seconds = 30 if debug else 10

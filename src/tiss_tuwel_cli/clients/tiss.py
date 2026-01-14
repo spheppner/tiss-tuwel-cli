@@ -67,10 +67,11 @@ class TissClient:
             response = requests.get(url, params=params, timeout=self.timeout)
             response.raise_for_status()
         except requests.exceptions.HTTPError as e:
-            # The TISS API returns 404 if no events are found in the given timeframe.
+            # The TISS API returns 404 if no events/exams are found.
             # We'll catch this specific case and return an empty list to prevent an error.
-            if e.response.status_code == 404 and "/event" in endpoint:
-                return []
+            if e.response.status_code == 404:
+                if "/event" in endpoint or "/examDates" in endpoint:
+                    return []
             raise TissAPIError(str(e))
         except requests.RequestException as e:
             raise TissAPIError(str(e))

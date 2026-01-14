@@ -141,10 +141,10 @@ class ConfigManager:
 
     # Default settings
     DEFAULT_SETTINGS = {
-        "auto_login": True,           # Silent background login when token expires
+        "auto_login": True,  # Silent background login when token expires
         "rc_widgets": ["deadlines", "todos", "exams"],  # Widgets for rc command
-        "theme": "default",           # Future theming support
-        "wizard_completed": False,    # Track if initial setup wizard was run
+        "theme": "default",  # Future theming support
+        "wizard_completed": False,  # Track if initial setup wizard was run
     }
 
     def get_settings(self) -> Dict:
@@ -212,4 +212,3 @@ class ConfigManager:
         """Check if credentials are saved."""
         user, passw = self.get_login_credentials()
         return bool(user and passw)
-

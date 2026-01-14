@@ -6,7 +6,6 @@ all CLI features in a user-friendly way with keyboard navigation.
 """
 
 import re
-from collections import defaultdict
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -19,11 +18,10 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from tiss_tuwel_cli.cli import dashboard, get_tuwel_client
+from tiss_tuwel_cli.cli import get_tuwel_client
 from tiss_tuwel_cli.clients.tiss import TissClient
 from tiss_tuwel_cli.config import ConfigManager
 from tiss_tuwel_cli.utils import (
-    days_until,
     extract_course_number,
     parse_percentage,
     strip_html,
@@ -84,161 +82,28 @@ class InteractiveMenu:
         return self._user_info
 
     def _get_exam_alerts(self) -> List[dict]:
-        """
-        Fetch upcoming exam registration alerts for ongoing courses.
-        
-        Checks TISS for exam dates where registration is starting soon
-        or currently open for courses the user is enrolled in.
-        
-        Returns:
-            List of alert dictionaries with course info and registration details.
-        """
+        """Fetch exam alerts using shared logic."""
         if self._exam_alerts_cache is not None:
             return self._exam_alerts_cache
 
-        self._exam_alerts_cache = []
-
-        # Get current courses
         client = self._get_tuwel_client()
-        if not client:
-            return []
+        from tiss_tuwel_cli.cli.features import get_exam_alerts
 
-        try:
-            courses = client.get_enrolled_courses('inprogress')
-        except Exception:
-            return []
-
-        # For each course, try to extract course number and fetch exam dates
-        for course in courses:
-            shortname = course.get('shortname', '')
-            course_num = extract_course_number(shortname)
-
-            if not course_num:
-                continue
-
-            try:
-                exams = tiss.get_exam_dates(course_num)
-                if isinstance(exams, dict) and 'error' in exams:
-                    continue
-                if not isinstance(exams, list):
-                    continue
-
-                for exam in exams:
-                    reg_start = exam.get('registrationStart')
-                    reg_end = exam.get('registrationEnd')
-                    exam_date = exam.get('date')
-
-                    if reg_start:
-                        days_to_reg = days_until(reg_start)
-                        days_to_exam = days_until(exam_date) if exam_date else None
-
-                        # Alert if registration starts within configured days
-                        # or is currently open (reg_start passed but reg_end not)
-                        if days_to_reg is not None:
-                            if -EXAM_ALERT_DAYS_AFTER <= days_to_reg <= EXAM_ALERT_DAYS_BEFORE:
-                                alert = {
-                                    'course': shortname,
-                                    'course_fullname': course.get('fullname', shortname),
-                                    'exam_date': exam_date,
-                                    'registration_start': reg_start,
-                                    'registration_end': reg_end,
-                                    'days_to_registration': days_to_reg,
-                                    'days_to_exam': days_to_exam,
-                                    'mode': exam.get('mode', 'Unknown'),
-                                }
-                                self._exam_alerts_cache.append(alert)
-            except Exception:
-                # Skip courses that fail - don't let one failure break the loop
-                continue
-
-        # Sort by registration start date (soonest first)
-        self._exam_alerts_cache.sort(
-            key=lambda x: x.get('days_to_registration', 999)
-        )
-
+        # Use shared logic
+        self._exam_alerts_cache = get_exam_alerts(client, tiss)
         return self._exam_alerts_cache
 
     def _get_weekly_overview(self) -> List[dict]:
-        """
-        Get events and deadlines for the upcoming week.
-        
-        Returns:
-            List of events happening in the next 7 days.
-        """
+        """Get weekly events using shared logic."""
         client = self._get_tuwel_client()
-        if not client:
-            return []
-
-        try:
-            upcoming = client.get_upcoming_calendar()
-            events = upcoming.get('events', [])
-
-            # Filter to next 7 days
-            now = datetime.now().timestamp()
-            week_later = now + (7 * SECONDS_PER_DAY)
-
-            weekly = []
-            for event in events:
-                event_time = event.get('timestart', 0)
-                if now <= event_time <= week_later:
-                    weekly.append(event)
-
-            return weekly
-        except Exception:
-            return []
+        from tiss_tuwel_cli.cli.features import get_weekly_events
+        return get_weekly_events(client)
 
     def _get_study_progress(self) -> Dict[str, Any]:
-        """
-        Calculate overall study progress across all courses.
-        
-        Returns:
-            Dictionary with progress statistics.
-        """
+        """Get study progress using shared logic."""
         client = self._get_tuwel_client()
-        if not client:
-            return {}
-
-        try:
-            # Get checkmarks data for completion tracking
-            checkmarks_data = client.get_checkmarks([])
-            checkmarks_list = checkmarks_data.get('checkmarks', [])
-
-            total_checked = 0
-            total_possible = 0
-
-            for cm in checkmarks_list:
-                examples = cm.get('examples', [])
-                total_checked += sum(1 for ex in examples if ex.get('checked'))
-                total_possible += len(examples)
-
-            # Get assignments for pending work
-            assignments_data = client.get_assignments()
-            courses_with_assignments = assignments_data.get('courses', [])
-
-            now = datetime.now().timestamp()
-            pending_assignments = 0
-            overdue_assignments = 0
-
-            for course in courses_with_assignments:
-                for assign in course.get('assignments', []):
-                    due = assign.get('duedate', 0)
-                    if due > now:
-                        pending_assignments += 1
-                    elif due > now - (7 * SECONDS_PER_DAY):
-                        # Overdue within last week
-                        overdue_assignments += 1
-
-            return {
-                'checkmarks_completed': total_checked,
-                'checkmarks_total': total_possible,
-                'checkmarks_percentage': (
-                    (total_checked / total_possible * 100) if total_possible > 0 else 0
-                ),
-                'pending_assignments': pending_assignments,
-                'overdue_assignments': overdue_assignments,
-            }
-        except Exception:
-            return {}
+        from tiss_tuwel_cli.cli.features import get_study_progress
+        return get_study_progress(client)
 
     def _get_grade_summary(self) -> Dict[str, Any]:
         """
@@ -795,14 +660,22 @@ class InteractiveMenu:
             choices = []
             for course in courses:
                 cid = course.get('id')
+                from tiss_tuwel_cli.utils import format_course_name
                 shortname = course.get('shortname', '')
                 fullname = course.get('fullname', '')
                 # Truncate if too long
                 if len(fullname) > 50:
                     fullname = fullname[:47] + "..."
+                num = extract_course_number(shortname)
+                display_name = format_course_name(fullname, num)
+
+                # Truncate if too long (keeping it readable)
+                if len(display_name) > 60:
+                    display_name = display_name[:57] + "..."
+
                 choices.append(Choice(
                     value=course,
-                    name=f"[{cid}] {shortname} - {fullname}"
+                    name=display_name
                 ))
 
             choices.append(Separator())
@@ -826,12 +699,17 @@ class InteractiveMenu:
         course_name = course.get('fullname', 'Unknown Course')
         shortname = course.get('shortname', '')
 
+        # Format name consistently
+        from tiss_tuwel_cli.utils import format_course_name
+        course_num = extract_course_number(shortname)
+        display_name = format_course_name(course_name, course_num)
+
         while True:
             self._clear_screen()
-            self._print_header(shortname or "Course Details")
+            self._print_header(display_name or "Course Details")
 
             # Build course info panel with TISS data if available
-            info_text = f"[bold]{course_name}[/bold]\n"
+            info_text = f"[bold]{display_name}[/bold]\n"
             info_text += f"[dim]Course ID: {course_id}[/dim]"
 
             # Try to extract course number and fetch TISS data
@@ -1018,57 +896,13 @@ class InteractiveMenu:
     def _show_course_assignments(self, course_id: int, course_name: str):
         """Show assignments for a specific course."""
         self._clear_screen()
-        self._print_header("Assignments")
+        self._print_header(f"Assignments - {course_name}")
 
-        client = self._get_tuwel_client()
-        if not client:
-            rprint("[red]Error: Not authenticated.[/red]")
-            self._wait_for_continue()
-            return
-
-        with console.status("[bold green]Fetching assignments...[/bold green]"):
-            try:
-                data = client.get_assignments()
-            except Exception as e:
-                rprint(f"[red]Error: {e}[/red]")
-                self._wait_for_continue()
-                return
-
-        courses_with_assignments = data.get('courses', [])
-
-        # Find assignments for this specific course
-        table = Table(title=f"Assignments - {course_name[:40]}...", expand=True)
-        table.add_column("Assignment", style="white", no_wrap=False)
-        table.add_column("Due Date", style="green", justify="right")
-        table.add_column("Status", justify="center")
-
-        now = datetime.now().timestamp()
-        found = False
-
-        for course in courses_with_assignments:
-            if course.get('id') == course_id:
-                for assign in course.get('assignments', []):
-                    found = True
-                    due = assign.get('duedate', 0)
-                    name = assign.get('name', 'Unknown')
-
-                    if due < now:
-                        status = "[red]Closed[/red]"
-                    else:
-                        days_left = (due - now) / SECONDS_PER_DAY
-                        if days_left < 1:
-                            status = "[bold red]Due Soon![/bold red]"
-                        elif days_left < 3:
-                            status = f"[yellow]Due in {days_left:.0f}d[/yellow]"
-                        else:
-                            status = "[green]Open[/green]"
-
-                    table.add_row(name, timestamp_to_date(due), status)
-
-        if found:
-            console.print(table)
-        else:
-            rprint("[yellow]No assignments found for this course.[/yellow]")
+        from tiss_tuwel_cli.cli.courses import assignments as show_assignments
+        try:
+            show_assignments(course_id=course_id)
+        except Exception as e:
+            rprint(f"[red]Error loading assignments: {e}[/red]")
 
         self._wait_for_continue()
 
@@ -1105,111 +939,15 @@ class InteractiveMenu:
         self._wait_for_continue()
 
     def _show_checkmarks(self):
-        """Show Kreuzerlübungen status with clean, grouped view."""
+        """Show Kreuzerlübungen status."""
         self._clear_screen()
         self._print_header("Kreuzerlübungen")
 
-        client = self._get_tuwel_client()
-        if not client:
-            rprint("[red]Error: Not authenticated.[/red]")
-            self._wait_for_continue()
-            return
-
-        with console.status("[bold green]Fetching Kreuzerlübungen...[/bold green]"):
-            try:
-                checkmarks_data = client.get_checkmarks([])
-                checkmarks_list = checkmarks_data.get('checkmarks', [])
-            except Exception as e:
-                rprint(f"[red]Error fetching checkmarks: {e}[/red]")
-                self._wait_for_continue()
-                return
-
-        if not checkmarks_list:
-            rprint("[yellow]No Kreuzerlübungen found in your courses.[/yellow]")
-            self._wait_for_continue()
-            return
-
-        # Group by course
-        courses_data: Dict[int, Dict[str, Any]] = {}
-        for cm in checkmarks_list:
-            course_id = cm.get('course')
-            if course_id not in courses_data:
-                courses_data[course_id] = {
-                    'exercises': [],
-                    'total_checked': 0,
-                    'total_possible': 0,
-                    'total_grade': 0.0,
-                    'graded_count': 0
-                }
-
-            examples = cm.get('examples', [])
-            checked = sum(1 for ex in examples if ex.get('checked'))
-            total = len(examples)
-
-            feedback = cm.get('feedback', {})
-            grade_str = feedback.get('grade', '-')
-
-            courses_data[course_id]['exercises'].append({
-                'name': cm.get('name'),
-                'checked': checked,
-                'total': total,
-                'grade': grade_str,
-                'deadline': cm.get('cutoffdate', 0)
-            })
-
-            courses_data[course_id]['total_checked'] += checked
-            courses_data[course_id]['total_possible'] += total
-
-            if grade_str and grade_str != '-':
-                try:
-                    courses_data[course_id]['total_grade'] += float(grade_str)
-                    courses_data[course_id]['graded_count'] += 1
-                except ValueError:
-                    pass
-
-        # Display grouped by course
-        for course_id, data in courses_data.items():
-            total_checked = data['total_checked']
-            total_possible = data['total_possible']
-            completion_pct = (total_checked / total_possible * 100) if total_possible > 0 else 0
-
-            # Create summary panel
-            avg_grade = data['total_grade'] / data['graded_count'] if data['graded_count'] > 0 else 0
-
-            summary = f"[bold]Course {course_id}[/bold]\n"
-            summary += f"Completion: {total_checked}/{total_possible} ({completion_pct:.0f}%)"
-            if data['graded_count'] > 0:
-                summary += f" | Avg Grade: {avg_grade:.1f}"
-
-            console.print(Panel(summary, expand=True))
-
-            # Create exercise table
-            table = Table(expand=True, show_header=True, header_style="bold")
-            table.add_column("Exercise", style="white", no_wrap=False)
-            table.add_column("Checked", justify="center", style="cyan")
-            table.add_column("Grade", justify="right", style="magenta")
-            table.add_column("Deadline", style="dim")
-
-            for ex in data['exercises']:
-                checked_str = f"{ex['checked']}/{ex['total']}"
-                if ex['checked'] == ex['total']:
-                    checked_str = f"[green]{checked_str} ✓[/green]"
-                elif ex['checked'] > 0:
-                    checked_str = f"[yellow]{checked_str}[/yellow]"
-                else:
-                    checked_str = f"[red]{checked_str}[/red]"
-
-                deadline = timestamp_to_date(ex['deadline']) if ex['deadline'] else "No deadline"
-
-                table.add_row(
-                    ex['name'],
-                    checked_str,
-                    str(ex['grade']),
-                    deadline
-                )
-
-            console.print(table)
-            console.print()
+        from tiss_tuwel_cli.cli.courses import checkmarks as show_checkmarks
+        try:
+            show_checkmarks()
+        except Exception as e:
+            rprint(f"[red]Error loading checkmarks: {e}[/red]")
 
         self._wait_for_continue()
 
@@ -1306,174 +1044,28 @@ class InteractiveMenu:
         self._wait_for_continue()
 
     def _show_weekly_overview(self):
-        """Show events and deadlines for the current week, including exam dates."""
+        """Show events and deadlines for the current week using shared dashboard logic."""
         self._clear_screen()
-        self._print_header("This Week")
+        # Header is printed by the function
 
-        with console.status("[bold green]Fetching weekly events...[/bold green]"):
-            weekly = self._get_weekly_overview()
-
-            # Also get exam alerts that fall in this week
-            exam_alerts = self._get_exam_alerts()
-
-        all_events = []
-
-        # Add TUWEL events
-        for event in weekly:
-            all_events.append({
-                'type': 'tuwel',
-                'name': event.get('name', 'Unknown'),
-                'course': event.get('course', {}).get('shortname', ''),
-                'timestart': event.get('timestart', 0),
-                'source': '📚 TUWEL'
-            })
-
-        # Add exam dates from TISS that are within this week
-        now = datetime.now().timestamp()
-        week_later = now + (7 * SECONDS_PER_DAY)
-
-        for alert in exam_alerts:
-            exam_date_str = alert.get('exam_date')
-            if exam_date_str:
-                try:
-                    exam_time = datetime.fromisoformat(exam_date_str.replace('Z', '+00:00')).replace(tzinfo=None).timestamp()
-                    if now <= exam_time <= week_later:
-                        all_events.append({
-                            'type': 'exam',
-                            'name': f"Exam - {alert.get('mode', 'Unknown')}",
-                            'course': alert.get('course', ''),
-                            'timestart': exam_time,
-                            'source': '🎓 TISS Exam'
-                        })
-                except Exception:
-                    pass
-
-        if not all_events:
-            rprint("[yellow]No events or deadlines in the next 7 days.[/yellow]")
-            rprint()
-            rprint("[green]🎉 Enjoy your free week![/green]")
-            self._wait_for_continue()
-            return
-
-        # Group by day
-        by_day: Dict[str, List[dict]] = defaultdict(list)
-
-        for event in sorted(all_events, key=lambda x: x['timestart']):
-            event_time = event.get('timestart', 0)
-            day = datetime.fromtimestamp(event_time).strftime('%A, %b %d')
-            by_day[day].append(event)
-
-        # Display events grouped by day
-        for day, events in by_day.items():
-            console.print(f"[bold cyan]📅 {day}[/bold cyan]")
-            for event in events:
-                event_name = event.get('name', 'Unknown')
-                course = event.get('course', '')
-                event_time = event.get('timestart', 0)
-                time_str = datetime.fromtimestamp(event_time).strftime('%H:%M')
-                source = event.get('source', '')
-                event_type = event.get('type', '')
-
-                days_left = (event_time - now) / SECONDS_PER_DAY
-
-                # Different styling for exams vs regular events
-                if event_type == 'exam':
-                    style = "bold magenta"
-                    icon = "🎓"
-                elif days_left < 1:
-                    style = "bold red"
-                    icon = "🔥"
-                elif days_left < 2:
-                    style = "yellow"
-                    icon = "⏰"
-                else:
-                    style = "white"
-                    icon = "📌"
-
-                console.print(
-                    f"   {icon} [{style}]{time_str}[/{style}] "
-                    f"[{style}]{course}[/{style}] - {event_name} "
-                    f"[dim]({source})[/dim]"
-                )
-            console.print()
-
-        # Summary
-        total = len(all_events)
-        urgent = sum(1 for e in all_events if (e.get('timestart', 0) - now) < SECONDS_PER_DAY)
-        exams = sum(1 for e in all_events if e.get('type') == 'exam')
-
-        summary_text = f"[dim]Total: {total} events/deadlines this week"
-        if exams > 0:
-            summary_text += f" | {exams} exam(s)"
-        summary_text += "[/dim]"
-
-        rprint(summary_text)
-        if urgent > 0:
-            rprint(f"[bold red]⚠️ {urgent} in the next 24 hours![/bold red]")
+        from tiss_tuwel_cli.cli.dashboard import weekly_overview
+        try:
+            weekly_overview()
+        except Exception as e:
+            rprint(f"[red]Error loading weekly overview: {e}[/red]")
 
         self._wait_for_continue()
 
     def _show_grade_summary(self):
-        """Show a summary of grades across all courses."""
+        """Show grades summary."""
         self._clear_screen()
-        self._print_header("Grade Summary")
+        self._print_header("My Grades")
 
-        with console.status("[bold green]Fetching grades...[/bold green]"):
-            # Force refresh
-            self._grade_summary_cache = None
-            summary = self._get_grade_summary()
-
-        course_grades = summary.get('course_grades', [])
-        avg = summary.get('average', 0)
-
-        if not course_grades:
-            rprint("[yellow]No grade data found for your current courses.[/yellow]")
-            rprint()
-            rprint("[dim]Grades will appear here once they are published in TUWEL.[/dim]")
-            self._wait_for_continue()
-            return
-
-        console.print(Panel(
-            f"[bold]📊 Overall Average: {avg:.1f}%[/bold]",
-            expand=False,
-            border_style="green" if avg >= 70 else "yellow" if avg >= 50 else "red"
-        ))
-        console.print()
-
-        table = Table(title="Course Grades", expand=True)
-        table.add_column("Course", style="white", no_wrap=False)
-        table.add_column("Grade %", justify="right")
-        table.add_column("Status", justify="center")
-
-        for grade in course_grades:
-            pct = grade.get('percentage', 0)
-            course = grade.get('course', '')
-
-            if pct >= 87.5:
-                status = "[bold green]Excellent (1)[/bold green]"
-                pct_style = "green"
-            elif pct >= 75:
-                status = "[green]Good (2)[/green]"
-                pct_style = "green"
-            elif pct >= 62.5:
-                status = "[yellow]Satisfactory (3)[/yellow]"
-                pct_style = "yellow"
-            elif pct >= 50:
-                status = "[yellow]Sufficient (4)[/yellow]"
-                pct_style = "yellow"
-            else:
-                status = "[red]Fail (5)[/red]"
-                pct_style = "red"
-
-            table.add_row(
-                course,
-                f"[{pct_style}]{pct:.1f}%[/{pct_style}]",
-                status
-            )
-
-        console.print(table)
-        console.print()
-        rprint(f"[dim]📊 Showing grades from {len(course_grades)} course(s)[/dim]")
+        from tiss_tuwel_cli.cli.courses import grades as show_grades
+        try:
+            show_grades()
+        except Exception as e:
+            rprint(f"[red]Error loading grades: {e}[/red]")
 
         self._wait_for_continue()
 
@@ -1532,11 +1124,6 @@ class InteractiveMenu:
 
     def _record_participation(self):
         """Record a participation event."""
-        from tiss_tuwel_cli.participation_tracker import ParticipationTracker
-
-        self._clear_screen()
-        self._print_header("Record Participation")
-
         # Get course list
         client = self._get_tuwel_client()
         if not client:
@@ -1579,28 +1166,14 @@ class InteractiveMenu:
             default=False
         ).execute()
 
-        # Record it
-        tracker = ParticipationTracker()
-        tracker.record_participation(
+        # Delegate to shared command
+        from tiss_tuwel_cli.cli.courses import track_participation
+        self._clear_screen()
+        track_participation(
             course_id=selected_course.get('id'),
-            course_name=selected_course.get('fullname', f"Course {selected_course.get('id')}"),
             exercise_name=exercise_name,
             was_called=was_called
         )
-
-        # Show updated stats
-        stats = tracker.calculate_probability(selected_course.get('id'))
-        if stats:
-            self._clear_screen()
-            self._print_header("Recorded!")
-
-            status = "[green]✓ Called[/green]" if was_called else "[dim]○ Not called[/dim]"
-            rprint(f"[bold]{exercise_name}[/bold] - {status}")
-            rprint(f"[bold cyan]{stats['course_name']}[/bold cyan]")
-            rprint()
-            rprint(f"Total sessions: {stats['total_sessions']}")
-            rprint(f"Times called: {stats['times_called']}")
-            rprint(f"Next call probability: [yellow]{stats['adjusted_probability']:.1f}%[/yellow]")
 
         self._wait_for_continue()
 
@@ -1634,12 +1207,10 @@ class InteractiveMenu:
             pointer="→",
         ).execute()
 
-        # Show detailed stats
-        stats = tracker.calculate_probability(selected_id)
-        if stats:
-            self._clear_screen()
-            from tiss_tuwel_cli.cli.courses import _display_detailed_stats
-            _display_detailed_stats(stats)
+        # Delegate to shared command
+        from tiss_tuwel_cli.cli.courses import participation_stats
+        self._clear_screen()
+        participation_stats(course_id=selected_id)
 
         self._wait_for_continue()
 

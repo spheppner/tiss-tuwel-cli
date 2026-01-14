@@ -74,7 +74,7 @@ def get_tuwel_client(force_new_token: bool = False) -> TuwelClient:
         if user:
             rprint("[yellow]No valid token found. Attempting automatic re-login...[/yellow]")
             from tiss_tuwel_cli.cli.auth import _run_playwright_login_internal
-            success = _run_playwright_login_internal(user, _, False) # silent=True -> debug=False
+            success = _run_playwright_login_internal(user, _, False)  # silent=True -> debug=False
             if success:
                 token = config.get_tuwel_token()
             else:
@@ -84,24 +84,46 @@ def get_tuwel_client(force_new_token: bool = False) -> TuwelClient:
             rprint("[bold red]Error:[/bold red] TUWEL token not found. Please run [green]tiss-tuwel-cli login[/green] first.")
             raise typer.Exit()
 
-    client = TuwelClient(token)
+    def refresh_callback() -> str:
+        """Callback to refresh the token if invalid."""
+        # Only attempt if auto-login is enabled (default is True)
+        if not config.get_setting("auto_login", True):
+            # If auto-login is disabled, we can't do anything automatically
+            raise Exception("Auto-login is disabled.")
+
+        user, _ = config.get_login_credentials()
+        if user:
+            rprint("[yellow]Token invalid. Auto-login triggered...[/yellow]")
+            from tiss_tuwel_cli.cli.auth import _run_playwright_login_internal
+            # Attempt silent login
+            success = _run_playwright_login_internal(user, _, False)
+            if success:
+                new_token = config.get_tuwel_token()
+                if new_token:
+                    return new_token
+        raise Exception("Auto-login failed.")
+
+    # Initialize client with the refresh callback
+    client = TuwelClient(token, token_refresh_callback=refresh_callback)
 
     # 2. Validate existing token
     try:
         client.get_site_info()
     except Exception:
-        # If validation fails, try to get a new token
+        # If validation fails immediately, try the manual refresh flow once
+        # (This handles the startup case where token is known bad)
+        try:
+            new_token = refresh_callback()
+            return TuwelClient(new_token, token_refresh_callback=refresh_callback)
+        except Exception:
+            # If that fails, notify user
+            pass
+
         user, _ = config.get_login_credentials()
         if user:
-            rprint("[yellow]Token is invalid or expired. Attempting automatic re-login...[/yellow]")
-            from tiss_tuwel_cli.cli.auth import _run_playwright_login_internal
-            success = _run_playwright_login_internal(user, _, False) # silent=True -> debug=False
-            if success:
-                new_token = config.get_tuwel_token()
-                return TuwelClient(new_token)
-            else:
-                rprint("[bold red]Error:[/bold red] Automatic login failed. Please run [green]tiss-tuwel-cli login[/green] manually.")
-                raise typer.Exit()
+            # Fallback to the original verbose error message style if the callback path failed explicitly
+            rprint("[bold red]Error:[/bold red] Automatic login failed. Please run [green]tiss-tuwel-cli login[/green] manually.")
+            raise typer.Exit()
         else:
             rprint("[bold red]Error:[/bold red] Your TUWEL token is invalid. Please run [green]tiss-tuwel-cli login[/green] again.")
             raise typer.Exit()
@@ -137,4 +159,3 @@ app.command()(settings.settings)
 app.command()(rc.rc)
 
 __all__ = ["app", "console", "config", "tiss", "get_tuwel_client"]
-

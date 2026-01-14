@@ -1,0 +1,12 @@
+site_name: Student TUWEL-API Docs
+theme: readthedocs
+nav:
+  - Home: index.md
+  - Getting Started: getting_started.md
+  - Curated Functions: functions.md
+  - Function Documentation: all_functions.md
+  - Additional Notes: notes.md
+  - Examples: examples.md
+markdown_extensions:
+  - toc:
+      permalink: "#"

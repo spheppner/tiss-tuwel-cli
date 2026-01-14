@@ -307,3 +307,34 @@ def get_tiss_course_url(course_number: str, semester: Optional[str] = None) -> s
         return f"https://tiss.tuwien.ac.at/course/courseDetails.xhtml?courseNr={course_number}&semester={semester}"
     else:
         return f"https://tiss.tuwien.ac.at/course/courseDetails.xhtml?courseNr={course_number}"
+
+
+def format_course_name(name: str, number: Optional[str] = None) -> str:
+    """
+    Format a course name and number consistently.
+    
+    Ensures the name is prominent and the number is included if available
+    and not already part of the name.
+    
+    Args:
+        name: The course name (e.g. "Software Engineering").
+        number: The course number (e.g. "192.167").
+        
+    Returns:
+        Formatted string (e.g. "Software Engineering (192.167)").
+    """
+    if not name:
+        name = "Unknown Course"
+
+    if not number:
+        return name
+
+    # Check if number is already in name (common in TUWEL fullnames like "123.456 VU Title")
+    # We strip dots for comparison to match "123456" with "123.456"
+    clean_num = number.replace(".", "")
+    clean_name = name.replace(".", "")
+
+    if clean_num in clean_name:
+        return name
+
+    return f"{name} ({number})"

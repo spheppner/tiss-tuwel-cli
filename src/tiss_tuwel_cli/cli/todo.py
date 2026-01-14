@@ -8,6 +8,7 @@ from rich import print as rprint
 from rich.console import Console
 
 from tiss_tuwel_cli.cli import get_tuwel_client
+from tiss_tuwel_cli.utils import extract_course_number, format_course_name
 
 console = Console()
 
@@ -35,11 +36,49 @@ def todo():
     urgent_items = []
     now = datetime.now().timestamp()
 
+    # Create set of all course IDs involved
+    # Ensure IDs are ints
+    related_course_ids = list(set(int(cm.get('course')) for cm in checkmarks_list if cm.get('course')))
+
+    # Resolve names
+    course_names = {}
+
+    # 1. Try existing course list
+    missing_ids = set(related_course_ids)
+    for c in courses:
+        cid = c.get('id')
+        if cid:
+            cid = int(cid)
+            if cid in missing_ids:
+                # Format
+                short = c.get('shortname', '')
+                full = c.get('fullname', f"Course {cid}")
+                num = extract_course_number(short)
+                course_names[cid] = format_course_name(full, num)
+                missing_ids.remove(cid)
+
+    # 2. Fetch missing
+    if missing_ids:
+        try:
+            ids_list = list(missing_ids)
+            fetched = client.get_courses(ids_list)
+            for c in fetched:
+                cid = c.get('id')
+                if cid:
+                    cid = int(cid)
+                    short = c.get('shortname', '')
+                    full = c.get('fullname', f"Course {cid}")
+                    num = extract_course_number(short)
+                    course_names[cid] = format_course_name(full, num)
+        except Exception:
+            pass
+
     for cm in checkmarks_list:
         name = cm.get('name', 'Unknown')
         course_id = cm.get('course')
-        # Find course name
-        course_name = next((c['fullname'] for c in courses if c['id'] == course_id), f"Course {course_id}")
+        if course_id:
+            course_id = int(course_id)
+        course_name = course_names.get(course_id, f"Course {course_id}")
 
         # Check deadline
         due_date = cm.get('duedate', 0)

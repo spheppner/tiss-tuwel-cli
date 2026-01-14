@@ -5,7 +5,6 @@ This module provides commands for configuring user preferences,
 running the setup wizard, and managing credentials.
 """
 
-import typer
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 from InquirerPy.separator import Separator
@@ -44,15 +43,15 @@ def show_settings_menu():
 
         # Show current settings
         current = config.get_settings()
-        
+
         table = Table(title="Current Settings", expand=False)
         table.add_column("Setting", style="cyan")
         table.add_column("Value", style="white")
-        
+
         table.add_row("Auto-login", "✓ Enabled" if current.get("auto_login") else "✗ Disabled")
         table.add_row("RC Widgets", ", ".join(current.get("rc_widgets", [])) or "None")
         table.add_row("Credentials saved", "✓ Yes" if config.has_credentials() else "✗ No")
-        
+
         console.print(table)
         console.print()
 
@@ -104,11 +103,11 @@ def toggle_auto_login():
 def configure_widgets():
     """Configure which widgets appear in the rc command."""
     current_widgets = config.get_setting("rc_widgets", [])
-    
+
     console.print()
     rprint("[dim]Use [bold]Space[/bold] to toggle, [bold]Enter[/bold] to confirm[/dim]")
     console.print()
-    
+
     choices = [
         Choice(value=key, name=desc, enabled=key in current_widgets)
         for key, desc in AVAILABLE_WIDGETS.items()
@@ -146,7 +145,7 @@ def run_wizard():
     rprint("[cyan]What should appear in the quick status summary?[/cyan]")
     rprint("[dim]Use [bold]Space[/bold] to toggle selection, [bold]Enter[/bold] to confirm[/dim]")
     console.print()
-    
+
     choices = [
         Choice(value=key, name=desc, enabled=True)
         for key, desc in AVAILABLE_WIDGETS.items()
@@ -166,7 +165,7 @@ def run_wizard():
             message="Would you like to save login credentials for automated login?",
             default=False
         ).execute()
-        
+
         if save_creds:
             from rich.prompt import Prompt
             rprint("\n[bold yellow]Warning:[/bold yellow] Credentials will be stored in plain text.")
@@ -187,13 +186,13 @@ def clear_credentials():
         message="Are you sure you want to delete saved credentials?",
         default=False
     ).execute()
-    
+
     if confirm:
         config.clear_credentials()
         rprint("[green]Credentials deleted.[/green]")
     else:
         rprint("[dim]Cancelled.[/dim]")
-    
+
     inquirer.text(message="Press Enter to continue...", default="").execute()
 
 
@@ -203,13 +202,13 @@ def clear_token():
         message="Are you sure you want to clear the auth token? You'll need to log in again.",
         default=False
     ).execute()
-    
+
     if confirm:
         config.clear_token()
         rprint("[green]Auth token cleared.[/green]")
     else:
         rprint("[dim]Cancelled.[/dim]")
-    
+
     inquirer.text(message="Press Enter to continue...", default="").execute()
 
 
@@ -219,11 +218,11 @@ def reset_settings():
         message="Are you sure you want to reset all settings?",
         default=False
     ).execute()
-    
+
     if confirm:
         config.reset_settings()
         rprint("[green]Settings reset to defaults.[/green]")
     else:
         rprint("[dim]Cancelled.[/dim]")
-    
+
     inquirer.text(message="Press Enter to continue...", default="").execute()

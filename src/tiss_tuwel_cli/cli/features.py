@@ -1,27 +1,30 @@
 """
-Additional valuable features for the TU Wien Companion CLI.
+Additional valuable features and shared logic for the TU Wien Companion CLI.
 
-This module provides advanced features that enhance the CLI experience:
+This module provides advanced features and shared data aggregation logic:
 - Calendar export (ICS format)
 - Course statistics dashboard
-- Calendar export (ICS format)
-- Course statistics dashboard
-- Course workload comparison
+- Exam registration alerts (TISS)
+- Study progress calculation
+- Weekly event aggregation
 """
 
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List, Dict, Any
 
 from rich import print as rprint
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from tiss_tuwel_cli.utils import days_until, extract_course_number
+
 console = Console()
 
-
-# Study time estimation constants (in hours)
-# Removed deprecated constants
+# Constants
+SECONDS_PER_DAY = 86400
+EXAM_ALERT_DAYS_BEFORE = 14  # Show alerts for registrations opening within this many days
+EXAM_ALERT_DAYS_AFTER = 7  # Show alerts for registrations that opened within this many days
 
 
 def export_calendar(output_file: Optional[str] = None):
@@ -40,15 +43,168 @@ def export_calendar(output_file: Optional[str] = None):
     timeline(export=True, output=output_file)
 
 
+def get_exam_alerts(client, tiss_client) -> List[dict]:
+    """
+    Fetch upcoming exam registration alerts for ongoing courses.
+    
+    Checks TISS for exam dates where registration is starting soon
+    or currently open for courses the user is enrolled in.
+    
+    Returns:
+        List of alert dictionaries with course info and registration details.
+    """
+    alerts = []
+
+    # Get current courses
+    if not client:
+        return []
+
+    try:
+        courses = client.get_enrolled_courses('inprogress')
+    except Exception:
+        return []
+
+    # For each course, try to extract course number and fetch exam dates
+    for course in courses:
+        shortname = course.get('shortname', '')
+        course_num = extract_course_number(shortname)
+
+        if not course_num:
+            continue
+
+        try:
+            exams = tiss_client.get_exam_dates(course_num)
+            if isinstance(exams, dict) and 'error' in exams:
+                continue
+            if not isinstance(exams, list):
+                continue
+
+            for exam in exams:
+                reg_start = exam.get('registrationStart')
+                reg_end = exam.get('registrationEnd')
+                exam_date = exam.get('date')
+
+                if reg_start:
+                    days_to_reg = days_until(reg_start)
+                    days_to_exam = days_until(exam_date) if exam_date else None
+
+                    # Alert if registration starts within configured days
+                    # or is currently open (reg_start passed but reg_end not)
+                    if days_to_reg is not None:
+                        if -EXAM_ALERT_DAYS_AFTER <= days_to_reg <= EXAM_ALERT_DAYS_BEFORE:
+                            alert = {
+                                'course': shortname,
+                                'course_fullname': course.get('fullname', shortname),
+                                'exam_date': exam_date,
+                                'registration_start': reg_start,
+                                'registration_end': reg_end,
+                                'days_to_registration': days_to_reg,
+                                'days_to_exam': days_to_exam,
+                                'mode': exam.get('mode', 'Unknown'),
+                            }
+                            alerts.append(alert)
+        except Exception:
+            # Skip courses that fail - don't let one failure break the loop
+            continue
+
+    # Sort by registration start date (soonest first)
+    alerts.sort(
+        key=lambda x: x.get('days_to_registration', 999)
+    )
+
+    return alerts
+
+
+def get_study_progress(client) -> Dict[str, Any]:
+    """
+    Calculate overall study progress across all courses.
+    
+    Returns:
+        Dictionary with progress statistics:
+        - checkmarks_completed
+        - checkmarks_total
+        - checkmarks_percentage
+        - pending_assignments
+        - overdue_assignments
+    """
+    if not client:
+        return {}
+
+    try:
+        # Get checkmarks data for completion tracking
+        checkmarks_data = client.get_checkmarks([])
+        checkmarks_list = checkmarks_data.get('checkmarks', [])
+
+        total_checked = 0
+        total_possible = 0
+
+        for cm in checkmarks_list:
+            examples = cm.get('examples', [])
+            total_checked += sum(1 for ex in examples if ex.get('checked'))
+            total_possible += len(examples)
+
+        # Get assignments for pending work
+        assignments_data = client.get_assignments()
+        courses_with_assignments = assignments_data.get('courses', [])
+
+        now = datetime.now().timestamp()
+        pending_assignments = 0
+        overdue_assignments = 0
+
+        for course in courses_with_assignments:
+            for assign in course.get('assignments', []):
+                due = assign.get('duedate', 0)
+                if due > now:
+                    pending_assignments += 1
+                elif due > now - (7 * SECONDS_PER_DAY):
+                    # Overdue within last week
+                    overdue_assignments += 1
+
+        return {
+            'checkmarks_completed': total_checked,
+            'checkmarks_total': total_possible,
+            'checkmarks_percentage': (
+                (total_checked / total_possible * 100) if total_possible > 0 else 0
+            ),
+            'pending_assignments': pending_assignments,
+            'overdue_assignments': overdue_assignments,
+        }
+    except Exception:
+        return {}
+
+
+def get_weekly_events(client) -> List[dict]:
+    """
+    Get events and deadlines for the upcoming week from TUWEL.
+    
+    Returns:
+        List of events happening in the next 7 days.
+    """
+    if not client:
+        return []
+
+    try:
+        upcoming = client.get_upcoming_calendar()
+        events = upcoming.get('events', [])
+
+        # Filter to next 7 days
+        now = datetime.now().timestamp()
+        week_later = now + (7 * SECONDS_PER_DAY)
+
+        weekly = []
+        for event in events:
+            event_time = event.get('timestart', 0)
+            if now <= event_time <= week_later:
+                weekly.append(event)
+
+        return weekly
+    except Exception:
+        return []
+
+
 def course_statistics(course_id: Optional[int] = None):
     """
     Show detailed statistics for a course.
-    
-    Displays comprehensive statistics including progress, deadlines,
-    completion rates, and time-based analytics.
-    
-    Args:
-        course_id: Optional course ID. If not provided, shows a list to choose from.
     """
     from tiss_tuwel_cli.cli import config, get_tuwel_client
 
@@ -69,7 +225,12 @@ def course_statistics(course_id: Optional[int] = None):
         table.add_column("Course", style="cyan")
 
         for course in courses:
-            table.add_row(str(course.get('id')), course.get('fullname', 'Unknown'))
+            from tiss_tuwel_cli.utils import extract_course_number, format_course_name
+            short = course.get('shortname', '')
+            full = course.get('fullname', 'Unknown')
+            num = extract_course_number(short)
+            display_name = format_course_name(full, num)
+            table.add_row(str(course.get('id')), display_name)
 
         console.print(table)
         return
@@ -96,7 +257,11 @@ def course_statistics(course_id: Optional[int] = None):
             return
 
     # Display comprehensive statistics
-    course_name = course_info.get('fullname', 'Unknown Course')
+    from tiss_tuwel_cli.utils import extract_course_number, format_course_name
+    shortname = course_info.get('shortname', 'N/A')
+    fullname = course_info.get('fullname', 'Unknown Course')
+    course_num = extract_course_number(shortname)
+    course_name = format_course_name(fullname, course_num)
 
     rprint(Panel(
         f"[bold cyan]{course_name}[/bold cyan]\n"
@@ -217,7 +382,7 @@ def unified_course_view(course_id: Optional[int] = None):
     """
     from tiss_tuwel_cli.cli import get_tuwel_client
     from tiss_tuwel_cli.clients.tiss import TissClient
-    from tiss_tuwel_cli.utils import extract_course_number, get_current_semester, timestamp_to_date
+    from tiss_tuwel_cli.utils import extract_course_number, get_current_semester, timestamp_to_date, format_course_name
 
     client = get_tuwel_client()
     tiss = TissClient()
@@ -247,10 +412,11 @@ def unified_course_view(course_id: Optional[int] = None):
 
         # Extract course number and try to fetch TISS data
         course_num = extract_course_number(shortname)
+        display_name = format_course_name(fullname, course_num)
 
         console.print()
         console.print(f"[bold cyan]{'=' * 80}[/bold cyan]")
-        console.print(f"[bold white]{fullname}[/bold white]")
+        console.print(f"[bold white]{display_name}[/bold white]")
         console.print(f"[dim]TUWEL ID: {cid} | Code: {shortname}[/dim]")
         console.print()
 

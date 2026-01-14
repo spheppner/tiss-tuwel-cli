@@ -9,7 +9,7 @@ and other educational resources.
 """
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Callable
 
 import requests
 
@@ -41,24 +41,28 @@ class TuwelClient:
 
     BASE_URL = "https://tuwel.tuwien.ac.at/webservice/rest/server.php"
 
-    def __init__(self, token: str, timeout: int = 15):
+    def __init__(self, token: str, timeout: int = 15, token_refresh_callback: Optional[Callable[[], str]] = None):
         """
         Initialize the TUWEL client.
         
         Args:
             token: TUWEL authentication token obtained via mobile app login flow.
             timeout: Request timeout in seconds (default: 15).
+            token_refresh_callback: Optional function to call if token is invalid. 
+                                    Should return a new valid token string or raise an exception.
         """
         self.token = token
         self.timeout = timeout
+        self.token_refresh_callback = token_refresh_callback
 
-    def _call(self, wsfunction: str, params: Optional[Dict[str, Any]] = None) -> Any:
+    def _call(self, wsfunction: str, params: Optional[Dict[str, Any]] = None, _retry: bool = True) -> Any:
         """
         Make a POST request to the TUWEL web service.
         
         Args:
             wsfunction: The Moodle web service function name.
             params: Optional additional parameters for the function.
+            _retry: Internal flag to prevent infinite recursion during token refresh.
             
         Returns:
             JSON response from the API.
@@ -70,14 +74,14 @@ class TuwelClient:
         if params is None:
             params = {}
 
-        # Moodle expects lists as indexed arrays. The `key[]=value` format is the most
-        # reliable way for PHP to interpret this from form data.
+        # Moodle expects lists as indexed arrays. Using explicit indices `key[i]=value`
+        # is safer than `key[]=value` as some plugins/parsers map the latter inconsistently.
         scalar_params = {}
         list_params = []
         for key, value in params.items():
             if isinstance(value, list):
-                for item in value:
-                    list_params.append((f"{key}[]", item))
+                for i, item in enumerate(value):
+                    list_params.append((f"{key}[{i}]", item))
             else:
                 scalar_params[key] = value
 
@@ -97,7 +101,28 @@ class TuwelClient:
             data = response.json()
 
             if isinstance(data, dict) and "exception" in data:
-                raise TuwelAPIError(f"TUWEL Error: {data.get('message')}")
+                error_msg = data.get('message', '')
+                error_code = data.get('errorcode', '')
+
+                # Check for invalid token errors
+                if _retry and self.token_refresh_callback and (
+                        "Invalid token" in error_msg or
+                        "token" in error_msg.lower() or  # Broad check, relying on specific error codes usually
+                        error_code == "invalidtoken" or
+                        error_code == "accessexception"
+                ):
+                    # Attempt to refresh token
+                    try:
+                        new_token = self.token_refresh_callback()
+                        if new_token and new_token != self.token:
+                            self.token = new_token
+                            # Recursively retry once
+                            return self._call(wsfunction, params, _retry=False)
+                    except Exception:
+                        # If refresh fails, fall through to raise the original error
+                        pass
+
+                raise TuwelAPIError(f"TUWEL Error: {error_msg}")
 
             return data
         except requests.RequestException as e:
@@ -207,6 +232,7 @@ class TuwelClient:
         
         Args:
             course_ids: List of course IDs to fetch checkmarks from.
+                       If provided, results are filtered client-side.
                        Pass empty list to fetch from all courses.
             
         Returns:
@@ -218,7 +244,46 @@ class TuwelClient:
             >>> for cm in data.get('checkmarks', []):
             ...     print(cm['name'])
         """
-        return self._call("mod_checkmark_get_checkmarks_by_courses", {"courseids": course_ids})
+        # Always fetch all checkmarks to avoid API issues with array arguments
+        response = self._call("mod_checkmark_get_checkmarks_by_courses", {"courseids": []})
+
+        # Filter client-side if specific courses were requested
+        if course_ids:
+            filtered = []
+            for cm in response.get('checkmarks', []):
+                if cm.get('course') in course_ids:
+                    filtered.append(cm)
+            response['checkmarks'] = filtered
+
+        return response
+
+    def get_courses(self, course_ids: List[int]) -> List[Dict[str, Any]]:
+        """
+        Fetch details for specific courses by ID.
+        
+        Args:
+            course_ids: List of course IDs to fetch.
+            
+        Returns:
+            List of course dictionaries containing fullname, shortname, etc.
+        """
+        if not course_ids:
+            return []
+
+        # formatting specific for our _call method which handles lists but not nested dicts
+        # we pass "options[ids]" as the key, and the list of IDs as value.
+        # _call will transform this into options[ids][0]=123, options[ids][1]=456...
+        params = {
+            "options[ids]": course_ids
+        }
+
+        try:
+            # core_course_get_courses returns a list of courses directly
+            return self._call("core_course_get_courses", params)
+        except TuwelAPIError:
+            # Fallback to get_courses_by_field
+            value = ",".join(map(str, course_ids))
+            return self._call("core_course_get_courses_by_field", {"field": "id", "value": value}).get('courses', [])
 
     def get_course_contents(self, course_id: int) -> List[Dict[str, Any]]:
         """

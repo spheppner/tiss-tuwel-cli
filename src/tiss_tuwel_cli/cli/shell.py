@@ -24,11 +24,11 @@ COMMAND_REGISTRY = {
     "quit": ("Exit the shell", "shell"),
     "clear": ("Clear the screen", "shell"),
     "interactive": ("Switch to menu mode", "shell"),
-    
+
     # Account
     "login": ("Log in to TUWEL", "account"),
     "settings": ("Configure preferences", "account"),
-    
+
     # Study
     "courses": ("List enrolled courses", "study"),
     "assignments": ("Show assignments", "study"),
@@ -37,13 +37,14 @@ COMMAND_REGISTRY = {
     "download": ("Download course materials (requires course_id)", "study"),
     "track-participation": ("Track exercise participation", "study"),
     "participation-stats": ("Show participation statistics", "study"),
-    
+
     # Planning
     "dashboard": ("Show dashboard with events", "planning"),
+    "weekly": ("Show weekly overview", "planning"),
     "timeline": ("Show unified timeline", "planning"),
     "todo": ("Show urgent tasks", "planning"),
     "rc": ("Quick status summary", "planning"),
-    
+
     # Tools
     "unified-view": ("Unified TISS+TUWEL course view", "tools"),
     "tiss-course": ("Search TISS for course (requires number)", "tools"),
@@ -93,7 +94,7 @@ def print_banner():
     # Show compact summary if logged in
     from tiss_tuwel_cli.config import ConfigManager
     config = ConfigManager()
-    
+
     summary_line = ""
     if config.get_tuwel_token():
         try:
@@ -108,7 +109,7 @@ def print_banner():
 [dim]Tab[/dim] - completion | [dim]↑↓[/dim] - history"""
 
     console.print(Panel(banner_text, border_style="cyan", expand=False))
-    
+
     if summary_line:
         console.print(summary_line)
     console.print()
@@ -125,11 +126,11 @@ def print_help():
         commands_in_cat = [
             (cmd, desc) for cmd, (desc, c) in COMMAND_REGISTRY.items() if c == cat_key
         ]
-        
+
         if commands_in_cat:
             # Category header
             table.add_row(f"[bold {cat_style}]─── {cat_name} ───[/bold {cat_style}]", "")
-            
+
             for cmd, desc in sorted(commands_in_cat):
                 table.add_row(f"  {cmd}", desc)
 
@@ -200,28 +201,28 @@ def _execute_cli_command(command: str, args: list):
     # Map commands to their handler functions
     if command == "login":
         from tiss_tuwel_cli.cli.auth import login
-        login()
-    
+        login(False, False, False)
+
     elif command == "settings":
         from tiss_tuwel_cli.cli.settings import show_settings_menu
         show_settings_menu()
-    
+
     elif command == "dashboard":
         from tiss_tuwel_cli.cli.dashboard import dashboard
         dashboard()
-    
+
     elif command == "courses":
         from tiss_tuwel_cli.cli.courses import courses
         courses()
-    
+
     elif command == "assignments":
         from tiss_tuwel_cli.cli.courses import assignments
         assignments()
-    
+
     elif command == "checkmarks":
         from tiss_tuwel_cli.cli.courses import checkmarks
         checkmarks()
-    
+
     elif command == "grades":
         from tiss_tuwel_cli.cli.courses import grades
         course_id = int(args[0]) if args else None
@@ -229,7 +230,7 @@ def _execute_cli_command(command: str, args: list):
             grades(course_id=course_id)
         else:
             console.print("[yellow]Usage: grades <course_id>[/yellow]")
-    
+
     elif command == "download":
         from tiss_tuwel_cli.cli.courses import download
         course_id = int(args[0]) if args else None
@@ -237,19 +238,23 @@ def _execute_cli_command(command: str, args: list):
             download(course_id=course_id)
         else:
             console.print("[yellow]Usage: download <course_id>[/yellow]")
-    
+
     elif command == "timeline":
         from tiss_tuwel_cli.cli.timeline import timeline
         timeline()
-    
+
     elif command == "todo":
         from tiss_tuwel_cli.cli.todo import todo
         todo()
-    
+
     elif command == "rc":
         from tiss_tuwel_cli.cli.rc import rc
         rc()
-    
+
+    elif command == "weekly":
+        from tiss_tuwel_cli.cli.dashboard import weekly_overview
+        weekly_overview()
+
     elif command == "tiss-course":
         from tiss_tuwel_cli.cli.courses import tiss_course
         if len(args) >= 1:
@@ -258,37 +263,37 @@ def _execute_cli_command(command: str, args: list):
             tiss_course(course_number=course_num, semester=semester)
         else:
             console.print("[yellow]Usage: tiss-course <number> [semester][/yellow]")
-    
+
     elif command == "unified-view":
         from tiss_tuwel_cli.cli.features import unified_course_view
         unified_course_view()
-    
+
     elif command == "export-calendar":
         from tiss_tuwel_cli.cli.features import export_calendar
         export_calendar()
-    
+
     elif command == "course-stats":
         from tiss_tuwel_cli.cli.features import course_statistics
         course_statistics()
-    
+
     elif command == "track-participation":
         from tiss_tuwel_cli.cli.courses import track_participation
         track_participation()
-    
+
     elif command == "participation-stats":
         from tiss_tuwel_cli.cli.courses import participation_stats
         participation_stats()
-    
+
     elif command == "open-vowi":
         from tiss_tuwel_cli.cli.courses import open_vowi
         query = " ".join(args) if args else None
         open_vowi(query=query)
-    
+
     else:
         # Fallback to CliRunner for any unhandled commands
         from typer.testing import CliRunner
         from tiss_tuwel_cli.cli import app
-        
+
         runner = CliRunner()
         result = runner.invoke(app, [command] + args)
         if result.output:

@@ -1,4 +1,4 @@
-# 🦉 TU Wien Companion CLI
+# 🦉 TU TISS TUWEL CLI / TU Companion CLI
 
 A Python CLI tool that merges TISS and TUWEL into a single terminal interface.
 
@@ -58,19 +58,19 @@ tiss-tuwel-cli login --manual
 
 ### Core Commands
 
-| Command | Description |
-|---------|-------------|
-| `dashboard` | Upcoming deadlines, calendar events, tips |
-| `timeline` | Merged TUWEL/TISS timeline. Use `--export` for .ics |
-| `todo` | Kreuzerlübung alerts (< 24h deadline, 0 ticked) |
-| `courses` | List enrolled courses |
-| `assignments` | Active assignments with deadline highlighting |
-| `checkmarks` | Ticked vs total examples per course |
-| `grades [course_id]` | Grade table for a course |
-| `download [course_id]` | Download all course files |
-| `tiss-course [number] [semester]` | Query TISS for course info |
-| `settings` | Configure preferences and widgets |
-| `rc` | One-line summary for shell startup |
+| Command                           | Description                                         |
+|-----------------------------------|-----------------------------------------------------|
+| `dashboard`                       | Upcoming deadlines, calendar events, tips           |
+| `timeline`                        | Merged TUWEL/TISS timeline. Use `--export` for .ics |
+| `todo`                            | Kreuzerlübung alerts (< 24h deadline, 0 ticked)     |
+| `courses`                         | List enrolled courses                               |
+| `assignments`                     | Active assignments with deadline highlighting       |
+| `checkmarks`                      | Ticked vs total examples per course                 |
+| `grades [course_id]`              | Grade table for a course                            |
+| `download [course_id]`            | Download all course files                           |
+| `tiss-course [number] [semester]` | Query TISS for course info                          |
+| `settings`                        | Configure preferences and widgets                   |
+| `rc`                              | One-line summary for shell startup                  |
 
 ### Shell Integration
 
@@ -118,3 +118,25 @@ Contributions welcome. Submit a Pull Request.
 ### Credits
 - TUWEL API: [student-api-documentation](https://github.com/tuwel-api/student-api-documentation)
 - TISS API: [tiss public-api](https://tiss.tuwien.ac.at/api/dokumentation)
+
+## Technical & Privacy Disclosure
+
+### ⚠ Disclaimer
+This tool uses unofficial methods. **Use at your own risk.**
+
+The developers of this tool are unable to verify the complete security of the methods used, as they involve simulating user interactions and utilizing undocumented APIs intended for the official Moodle mobile app.
+
+### 🔑 Token Mechanism
+The TUWEL authentication flow in this tool simulates the login process used by the official Moodle Mobile App. 
+- **Method:** It launches a browser (automated or manual), navigates to the official specific login page for the mobile app, and captures the `moodlemobile://token=` URL redirect.
+- **Source:** [student-api-documentation](https://github.com/tuwel-api/student-api-documentation)
+
+### ⏱ Token Expiration & Auto-Login
+The access tokens generated via this method have a **very short lifetime (approx. 2-5 minutes)**. 
+
+**Why use Auto-Login?**
+Because the token expires so quickly, using the CLI without `auto_login` enabled would require you to manually log in almost every time you run a command or even in the middle of a session.
+
+The **Auto-Login** feature securely (locally) stores your username and password to perform a silent, background authentication whenever your token expires. This ensures a seamless experience without constant interruptions. 
+
+*Credentials are stored locally in `~/.tu_companion/config.json`. They are never sent anywhere except directly to the TUWEL login page.*
