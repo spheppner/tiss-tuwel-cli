@@ -313,6 +313,20 @@ class InteractiveMenu:
             ))
         console.print()
 
+    def _print_compact_summary(self):
+        """Print a compact one-line summary using the rc module."""
+        from tiss_tuwel_cli.cli.rc import get_summary_line
+        client = self._get_tuwel_client()
+        summary = get_summary_line(client)
+        if summary:
+            console.print(summary)
+            console.print()
+
+    def _show_settings(self):
+        """Show the settings menu."""
+        from tiss_tuwel_cli.cli.settings import show_settings_menu
+        show_settings_menu()
+
     def _print_smart_dashboard(self):
         """Print an intelligent dashboard summary with exam alerts and smart features."""
         client = self._get_tuwel_client()
@@ -493,46 +507,35 @@ class InteractiveMenu:
         return self._courses_cache
 
     def show_main_menu(self):
-        """Display and handle the main menu."""
+        """Display and handle the main menu with hierarchical sub-menus."""
         while True:
             self._clear_screen()
             self._print_header("TU Wien Companion", "Interactive Mode")
 
-            # Show smart dashboard if authenticated
+            # Show compact summary if authenticated
             if self._is_authenticated():
-                self._print_smart_dashboard()
+                self._print_compact_summary()
 
             # Build menu choices based on auth status
             choices = []
 
             if self._is_authenticated():
                 choices.extend([
-                    Choice(value="courses", name="📚 My Courses"),
-                    Choice(value="unified", name="🔗 Unified Course View (TISS+TUWEL)"),
-                    Choice(value="dashboard", name="📊 Dashboard"),
-                    Choice(value="exams", name="🎓 Exam Registration"),
-                    Choice(value="weekly", name="📆 This Week"),
-                    Choice(value="assignments", name="📝 Assignments"),
-                    Choice(value="checkmarks", name="✅ Kreuzerlübungen"),
-                    Choice(value="participation", name="🎯 Exercise Participation"),
-                    Choice(value="grades", name="🏆 Grade Summary"),
-                    Separator("─── Advanced Features ───"),
-                    Choice(value="timeline", name="📅 Unified Timeline"),
-                    Choice(value="todo", name="⚡ Urgent Tasks (Todo)"),
-                    Choice(value="export_cal", name="📅 Export Calendar"),
-                    Separator(),
-                    Choice(value="tiss", name="🔍 Search TISS"),
+                    Separator("─── Main Menu ───"),
+                    Choice(value="study", name="📚 Study"),
+                    Choice(value="planning", name="📅 Planning & Deadlines"),
+                    Choice(value="tools", name="🛠️ Tools & Utilities"),
                     Separator(),
                 ])
             else:
                 choices.append(Separator("─── Login Required ───"))
 
-            choices.append(Choice(value="login", name="🔐 Login"))
-            choices.append(Separator())
+            choices.append(Choice(value="login", name="🔐 Account"))
+            choices.append(Choice(value="settings", name="⚙️ Settings"))
             choices.append(Choice(value="quit", name="🚪 Quit"))
 
             action = inquirer.select(
-                message="Select an option:",
+                message="Select a category:",
                 choices=choices,
                 pointer="→",
                 qmark="",
@@ -545,28 +548,112 @@ class InteractiveMenu:
                 break
             elif action == "login":
                 self._show_login_menu()
-            elif action == "unified":
-                self._show_unified_view()
+            elif action == "settings":
+                self._show_settings()
+            elif action == "study":
+                self._show_study_menu()
+            elif action == "planning":
+                self._show_planning_menu()
+            elif action == "tools":
+                self._show_tools_menu()
+
+    def _show_study_menu(self):
+        """Show the Study sub-menu."""
+        while True:
+            self._clear_screen()
+            self._print_header("Study", "Courses & Academics")
+
+            choices = [
+                Choice(value="courses", name="📚 My Courses"),
+                Choice(value="assignments", name="📝 Assignments"),
+                Choice(value="checkmarks", name="✅ Kreuzerlübungen"),
+                Choice(value="grades", name="🏆 Grades"),
+                Choice(value="participation", name="🎯 Exercise Participation"),
+                Separator(),
+                Choice(value="back", name="← Back"),
+            ]
+
+            action = inquirer.select(
+                message="Select an option:",
+                choices=choices,
+                pointer="→",
+                qmark="",
+            ).execute()
+
+            if action == "back":
+                break
             elif action == "courses":
                 self._show_courses_menu()
-            elif action == "dashboard":
-                self._show_dashboard()
-            elif action == "exams":
-                self._show_exam_registration()
-            elif action == "weekly":
-                self._show_weekly_overview()
             elif action == "assignments":
                 self._show_assignments()
             elif action == "checkmarks":
                 self._show_checkmarks()
-            elif action == "participation":
-                self._show_participation_menu()
             elif action == "grades":
                 self._show_grade_summary()
+            elif action == "participation":
+                self._show_participation_menu()
+
+    def _show_planning_menu(self):
+        """Show the Planning & Deadlines sub-menu."""
+        while True:
+            self._clear_screen()
+            self._print_header("Planning", "Deadlines & Schedule")
+
+            choices = [
+                Choice(value="dashboard", name="📊 Dashboard"),
+                Choice(value="weekly", name="📆 This Week"),
+                Choice(value="timeline", name="📅 Unified Timeline"),
+                Choice(value="todo", name="⚡ Urgent Tasks"),
+                Separator(),
+                Choice(value="back", name="← Back"),
+            ]
+
+            action = inquirer.select(
+                message="Select an option:",
+                choices=choices,
+                pointer="→",
+                qmark="",
+            ).execute()
+
+            if action == "back":
+                break
+            elif action == "dashboard":
+                self._show_dashboard()
+            elif action == "weekly":
+                self._show_weekly_overview()
             elif action == "timeline":
                 self._show_timeline()
             elif action == "todo":
                 self._show_todo()
+
+    def _show_tools_menu(self):
+        """Show the Tools & Utilities sub-menu."""
+        while True:
+            self._clear_screen()
+            self._print_header("Tools", "Utilities & Search")
+
+            choices = [
+                Choice(value="unified", name="🔗 Unified Course View (TISS+TUWEL)"),
+                Choice(value="exams", name="🎓 Exam Registration"),
+                Choice(value="export_cal", name="📅 Export Calendar"),
+                Choice(value="tiss", name="🔍 Search TISS"),
+                Separator(),
+                Choice(value="back", name="← Back"),
+            ]
+
+            action = inquirer.select(
+                message="Select an option:",
+                choices=choices,
+                pointer="→",
+                qmark="",
+            ).execute()
+
+            if action == "back":
+                break
+            elif action == "unified":
+                self._show_unified_view()
+            elif action == "exams":
+                self._show_exam_registration()
             elif action == "export_cal":
                 self._export_calendar()
             elif action == "tiss":
@@ -584,7 +671,8 @@ class InteractiveMenu:
                 console.print()
 
         choices = [
-            Choice(value="auto", name="🌐 Automated Login (Browser)"),
+            Choice(value="auto", name="🤖 Fully Automated Login"),
+            Choice(value="hybrid", name="🌐 Hybrid Login (Browser opens, manual click, auto-capture)"),
             Choice(value="manual", name="📋 Manual Setup (Paste Token)"),
             Separator(),
             Choice(value="back", name="← Back"),
@@ -599,6 +687,8 @@ class InteractiveMenu:
 
         if action == "auto":
             self._do_automated_login()
+        elif action == "hybrid":
+            self._do_hybrid_login()
         elif action == "manual":
             self._do_manual_setup()
 
@@ -609,7 +699,23 @@ class InteractiveMenu:
 
         from tiss_tuwel_cli.cli.auth import login
         try:
-            login()
+            login(False, False, False)
+            # Refresh user info
+            self._tuwel_client = None
+            self._user_info = None
+        except Exception as e:
+            rprint(f"[red]Error: {e}[/red]")
+
+        self._wait_for_continue()
+
+    def _do_hybrid_login(self):
+        """Perform hybrid browser login (manual click, auto-capture)."""
+        self._clear_screen()
+        self._print_header("Hybrid Login")
+
+        from tiss_tuwel_cli.cli.auth import hybrid_login
+        try:
+            hybrid_login()
             # Refresh user info
             self._tuwel_client = None
             self._user_info = None
@@ -1742,37 +1848,46 @@ def interactive():
         client = get_tuwel_client()
         info = client.get_site_info()
         console.print(f"\nWelcome back, {info.get('fullname')}\n")
-        # Display initial dashboard view
-        dashboard.dashboard()
 
     except Exception as e:
         console.print(f"\n[bold red]Error:[/bold red] {e}")
         return
 
+    menu = InteractiveMenu()
+
+    # Check for first run
+    if not config.get_setting("wizard_completed"):
+        from tiss_tuwel_cli.cli.settings import run_wizard
+        console.print(Panel("[bold green]Welcome to TU Wien Companion![/bold green]\n\nSince this is your first time, let's set things up.", expand=False))
+        if inquirer.confirm("Start setup wizard now?", default=True).execute():
+            run_wizard()
+        else:
+            # Mark as completed even if skipped to avoid nagging, or maybe we want to nag?
+            # User said "make the user go through", but skipping is usually polite.
+            # Let's nag next time if they skip.
+            pass
+
+    # Print compact summary
+    from tiss_tuwel_cli.cli.rc import get_summary_line
+    summary = get_summary_line()
+    if summary:
+        console.print(summary)
+        console.print()
+
     while True:
         choices = [
-            Choice(value="courses", name="📚 My Courses"),
-            Choice(value="unified", name="🔗 Unified Course View (TISS+TUWEL)"),
-            Choice(value="dashboard", name="📊 Dashboard"),
-            Choice(value="exams", name="🎓 Exam Registration"),
-            Choice(value="weekly", name="📆 This Week"),
-            Choice(value="assignments", name="📝 Assignments"),
-            Choice(value="checkmarks", name="✅ Kreuzerlübungen"),
-            Choice(value="participation", name="🎯 Exercise Participation"),
-            Choice(value="grades", name="🏆 Grade Summary"),
-            Separator("─── Advanced Features ───"),
-            Choice(value="timeline", name="📅 Unified Timeline"),
-            Choice(value="todo", name="⚡ Urgent Tasks (Todo)"),
-            Choice(value="export_cal", name="📅 Export Calendar"),
+            Separator("─── Main Menu ───"),
+            Choice(value="study", name="📚 Study"),
+            Choice(value="planning", name="📅 Planning & Deadlines"),
+            Choice(value="tools", name="🛠️ Tools & Utilities"),
             Separator(),
-            Choice(value="tiss", name="🔍 Search TISS"),
-            Separator(),
-            Choice(value="login", name="🔐 Login"),
+            Choice(value="login", name="🔐 Account"),
+            Choice(value="settings", name="⚙️ Settings"),
             Choice(value="quit", name="🚪 Quit"),
         ]
 
         action = inquirer.select(
-            message="Select an option:",
+            message="Select a category:",
             choices=choices,
             pointer="→",
             qmark="",
@@ -1783,30 +1898,12 @@ def interactive():
             console.print("[bold green]Goodbye![/bold green]")
             break
         elif action == "login":
-            InteractiveMenu()._show_login_menu()
-        elif action == "unified":
-            InteractiveMenu()._show_unified_view()
-        elif action == "courses":
-            InteractiveMenu()._show_courses_menu()
-        elif action == "dashboard":
-            InteractiveMenu()._show_dashboard()
-        elif action == "exams":
-            InteractiveMenu()._show_exam_registration()
-        elif action == "weekly":
-            InteractiveMenu()._show_weekly_overview()
-        elif action == "assignments":
-            InteractiveMenu()._show_assignments()
-        elif action == "checkmarks":
-            InteractiveMenu()._show_checkmarks()
-        elif action == "participation":
-            InteractiveMenu()._show_participation_menu()
-        elif action == "grades":
-            InteractiveMenu()._show_grade_summary()
-        elif action == "timeline":
-            InteractiveMenu()._show_timeline()
-        elif action == "todo":
-            InteractiveMenu()._show_todo()
-        elif action == "export_cal":
-            InteractiveMenu()._export_calendar()
-        elif action == "tiss":
-            InteractiveMenu()._show_tiss_search()
+            menu._show_login_menu()
+        elif action == "settings":
+            menu._show_settings()
+        elif action == "study":
+            menu._show_study_menu()
+        elif action == "planning":
+            menu._show_planning_menu()
+        elif action == "tools":
+            menu._show_tools_menu()

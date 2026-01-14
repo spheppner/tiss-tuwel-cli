@@ -136,3 +136,80 @@ class ConfigManager:
         config["tuwel_user"] = user
         config["tuwel_pass"] = passw
         self._save_config(config)
+
+    # ==================== SETTINGS MANAGEMENT ====================
+
+    # Default settings
+    DEFAULT_SETTINGS = {
+        "auto_login": True,           # Silent background login when token expires
+        "rc_widgets": ["deadlines", "todos", "exams"],  # Widgets for rc command
+        "theme": "default",           # Future theming support
+        "wizard_completed": False,    # Track if initial setup wizard was run
+    }
+
+    def get_settings(self) -> Dict:
+        """
+        Get all settings, merged with defaults.
+
+        Returns:
+            Dictionary of all settings with defaults applied.
+        """
+        config = self._load_config()
+        settings = config.get("settings", {})
+        # Merge with defaults (defaults take precedence for missing keys)
+        return {**self.DEFAULT_SETTINGS, **settings}
+
+    def get_setting(self, key: str, default=None):
+        """
+        Get a specific setting value.
+
+        Args:
+            key: The setting key.
+            default: Default value if not found (uses DEFAULT_SETTINGS if None).
+
+        Returns:
+            The setting value.
+        """
+        settings = self.get_settings()
+        if default is None:
+            default = self.DEFAULT_SETTINGS.get(key)
+        return settings.get(key, default)
+
+    def set_setting(self, key: str, value) -> None:
+        """
+        Set a specific setting value.
+
+        Args:
+            key: The setting key.
+            value: The value to set.
+        """
+        config = self._load_config()
+        if "settings" not in config:
+            config["settings"] = {}
+        config["settings"][key] = value
+        self._save_config(config)
+
+    def clear_credentials(self) -> None:
+        """Remove saved login credentials from config."""
+        config = self._load_config()
+        config.pop("tuwel_user", None)
+        config.pop("tuwel_pass", None)
+        self._save_config(config)
+
+    def clear_token(self) -> None:
+        """Remove saved TUWEL token from config."""
+        config = self._load_config()
+        config.pop("tuwel_token", None)
+        self._save_config(config)
+
+    def reset_settings(self) -> None:
+        """Reset all settings to defaults."""
+        config = self._load_config()
+        config["settings"] = dict(self.DEFAULT_SETTINGS)
+        self._save_config(config)
+
+    def has_credentials(self) -> bool:
+        """Check if credentials are saved."""
+        user, passw = self.get_login_credentials()
+        return bool(user and passw)
+

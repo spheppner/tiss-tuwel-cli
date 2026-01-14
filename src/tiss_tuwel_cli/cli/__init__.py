@@ -110,7 +110,7 @@ def get_tuwel_client(force_new_token: bool = False) -> TuwelClient:
 
 
 # Import and register command modules
-from tiss_tuwel_cli.cli import auth, courses, dashboard, features, timeline, todo
+from tiss_tuwel_cli.cli import auth, courses, dashboard, features, timeline, todo, settings, rc
 
 # Register commands
 app.command()(auth.login)
@@ -130,8 +130,11 @@ app.command(name="export-calendar")(features.export_calendar)
 app.command(name="course-stats")(features.course_statistics)
 app.command(name="unified-view")(features.unified_course_view)
 
-# New commands
+# Other commands
 app.command()(timeline.timeline)
 app.command()(todo.todo)
+app.command()(settings.settings)
+app.command()(rc.rc)
 
 __all__ = ["app", "console", "config", "tiss", "get_tuwel_client"]
+

@@ -24,6 +24,7 @@ config = ConfigManager()
 
 def login(
     manual: bool = typer.Option(False, "--manual", help="Start manual login by pasting a token URL instead of automating."),
+    hybrid: bool = typer.Option(False, "--hybrid", help="Open browser for manual login, auto-capture token."),
     debug: bool = typer.Option(False, "--debug", help="Enable debug mode with non-headless browser and verbose logs.")
 ):
     """
@@ -35,6 +36,10 @@ def login(
     """
     if manual:
         manual_login()
+        return
+    
+    if hybrid:
+        hybrid_login()
         return
 
     rprint("[yellow]Attempting automated TUWEL login...[/yellow]")
@@ -241,3 +246,93 @@ def manual_login():
         rprint(f"[bold green]Success![/bold green] Authenticated as [cyan]{info.get('fullname')}[/cyan].")
     except Exception as e:
         rprint(f"[bold red]Authentication failed:[/bold red] {e}")
+
+
+def hybrid_login():
+    """
+    [Hybrid] Opens a browser for manual login, captures the token automatically.
+    
+    This mode provides a middle ground between fully automated and manual login:
+    - Browser opens visibly (non-headless)
+    - User manually clicks through the login process
+    - Token URL is captured automatically when login completes
+    """
+    console.print(Panel("[bold blue]Hybrid Login[/bold blue]", expand=False))
+    rprint("[cyan]Opening browser for manual login...[/cyan]")
+    rprint("[dim]Please log in manually. The token will be captured automatically.[/dim]")
+    rprint()
+
+    token_url = ""
+
+    try:
+        with sync_playwright() as p:
+            storage_state_path = config.config_dir / "browser_state.json"
+
+            browser = p.chromium.launch(headless=False)
+            context = browser.new_context(
+                storage_state=storage_state_path if storage_state_path.exists() else None
+            )
+            page = context.new_page()
+
+            # Listener for the token URL
+            def on_request(request):
+                nonlocal token_url
+                if "moodlemobile://token=" in request.url:
+                    token_url = request.url
+                    rprint(f"[bold green]✓ Token captured![/bold green]")
+
+            page.on("request", on_request)
+
+            # Navigate to the mobile token page which will trigger login
+            page.goto("https://tuwel.tuwien.ac.at/admin/tool/mobile/launch.php?service=moodle_mobile_app&passport=student_api")
+
+            rprint("[yellow]Waiting for you to complete login...[/yellow]")
+            rprint("[dim]The browser will close automatically once the token is captured.[/dim]")
+
+            # Poll for token capture - wait up to 5 minutes (manual login can take time)
+            timeout_seconds = 300
+            end_time = time.time() + timeout_seconds
+            while time.time() < end_time:
+                if token_url:
+                    break
+                try:
+                    page.wait_for_timeout(500)
+                except Exception:
+                    # Page may be closed or navigating
+                    if token_url:
+                        break
+                    continue
+
+            # Save session state
+            try:
+                context.storage_state(path=storage_state_path)
+            except Exception:
+                pass  # May fail if browser was closed
+
+            browser.close()
+
+    except PlaywrightTimeoutError:
+        rprint("[bold red]Login timed out.[/bold red]")
+        return
+    except Exception as e:
+        if not token_url:
+            rprint(f"[bold red]Error during login:[/bold red] {e}")
+            return
+
+    if not token_url:
+        rprint("[bold red]Failed to capture token. Please try again or use manual mode.[/bold red]")
+        return
+
+    found_token = parse_mobile_token(token_url)
+
+    if found_token:
+        config.set_tuwel_token(found_token)
+        try:
+            client = TuwelClient(found_token)
+            info = client.get_site_info()
+            config.set_user_id(info.get('userid', 0))
+            rprint(f"[bold green]Success![/bold green] Authenticated as [cyan]{info.get('fullname')}[/cyan].")
+        except Exception as e:
+            rprint(f"[yellow]Token saved but validation failed: {e}[/yellow]")
+    else:
+        rprint("[bold red]Failed to parse token from URL.[/bold red]")

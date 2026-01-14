@@ -1,163 +1,120 @@
 # 🦉 TU Wien Companion CLI
 
-**Because clicking through 17 submenus to find out if you passed Linear Algebra is not efficient O(1) access.**
+A Python CLI tool that merges TISS and TUWEL into a single terminal interface.
 
-> **TL;DR:** A Python CLI tool that merges TISS and TUWEL into a single, beautiful terminal interface. Stop context-switching. Start procrastinating efficiently.
+## Features
 
-## 🤔 Why?
+- **Unified Timeline** - TUWEL deadlines and TISS exams in one chronological list, exportable as `.ics`
+- **Urgent Todo Alerts** - Notifications for upcoming Kreuzerlübungen with nothing ticked
+- **Participation Tracking** - Track exercise frequency and estimate call probability
+- **Bulk Downloads** - Download all course files recursively
+- **Shell Integration** - `rc` command for quick status in your shell startup
+- **Configurable Settings** - Widget selection, auto-login toggle, setup wizard
 
-As a TU Wien informatics student, your life is a constant state of:
-- Checking TISS for exam dates.
-- Checking TUWEL for homework deadlines.
-- Forgetting to tick your **Kreuzerl** because the module was hidden in "Section 4 > General > Important > New > Final".
-- Manually downloading `slides_v2_final_FINAL.pdf` one by one.
+## Installation
 
-**No more.** This tool brings the API (and the pain) directly to your terminal, formatted with [Rich](https://github.com/Textualize/rich) for that cyberpunk-hacker-aesthetic you crave.
-
-## ✨ Features
-
-- **📅 Unified Timeline**: See your **TUWEL deadlines** and **TISS exams** in one chronological list. Never miss a deadline again.
-- **⚡ Urgent Todo Checks**: The `todo` command nags you about upcoming "Kreuzerlübungen" submissions if you haven't ticked anything yet.
-- **🎲 Participation Tracking**: Track your exercise frequency and estimate your chances of being called.
-- **💾 Data Hoarding**: Download all course files recursively.
-
-## 📦 Installation
-
-Requires Python 3.8+ (because f-strings are life).
+Requires Python 3.8+.
 
 ```bash
-# Clone the repository
 git clone https://github.com/spheppner/tiss-tuwel-cli.git
 cd tiss-tuwel-cli
 
-# Create a venv (don't pollute your global site-packages, you animal)
 python -m venv .venv
 # Windows:
 .venv\Scripts\activate
 # Linux/Mac:
 source .venv/bin/activate
 
-# Install dependencies in editable mode
 pip install -e "."
 playwright install
 ```
 
-## 🔐 Authentication (The Fun Part)
+## Authentication
 
-We need your TUWEL Web Service Token. You have two options:
+Three login modes available:
 
-### Option A: The "I trust code" way (Automated) 🤖
-
-This is the recommended method. It uses Playwright to automate the login process in a headless browser.
-The first time you run it, you'll be asked for your credentials. You can choose to save them in a local config file (`~/.tu_companion/config.json`) for future automated logins.
-
-**Warning**: Credentials are stored in plain text.
-
-Your browser session (cookies, etc.) is stored in `~/.tu_companion/browser_data`, allowing for persistent sessions across runs.
+### Fully Automated 🤖
+Headless browser automation. Credentials can be saved for future logins.
 
 ```bash
 tiss-tuwel-cli login
 ```
 
-### Option B: The "Paranoid" way (Manual) 🕵️
-If you prefer to dig through Developer Tools yourself or automated login fails.
-Run `login --manual`, follow the instructions to generate the `moodlemobile://` token URL, and paste it into the terminal.
+### Hybrid 🌐
+Opens visible browser for manual login. Token captured automatically.
+
+```bash
+tiss-tuwel-cli login --hybrid
+```
+
+### Manual 🕵️
+Generate the `moodlemobile://` token URL yourself and paste it.
 
 ```bash
 tiss-tuwel-cli login --manual
 ```
 
-## 🚀 Usage
+## Usage
 
-### `dashboard`
-Your daily stand-up. Shows upcoming deadlines, calendar events, and helpful tips.
+### Core Commands
 
-```bash
-tiss-tuwel-cli dashboard
-```
+| Command | Description |
+|---------|-------------|
+| `dashboard` | Upcoming deadlines, calendar events, tips |
+| `timeline` | Merged TUWEL/TISS timeline. Use `--export` for .ics |
+| `todo` | Kreuzerlübung alerts (< 24h deadline, 0 ticked) |
+| `courses` | List enrolled courses |
+| `assignments` | Active assignments with deadline highlighting |
+| `checkmarks` | Ticked vs total examples per course |
+| `grades [course_id]` | Grade table for a course |
+| `download [course_id]` | Download all course files |
+| `tiss-course [number] [semester]` | Query TISS for course info |
+| `settings` | Configure preferences and widgets |
+| `rc` | One-line summary for shell startup |
 
-### `timeline`
-**The Master View.** Merges all active TUWEL assignments/events and TISS exam dates into a single timeline.
-Export to `.ics` to sync with your real calendar!
+### Shell Integration
 
-```bash
-tiss-tuwel-cli timeline
-tiss-tuwel-cli timeline --export  # Saves to ~/Downloads/unified_timeline.ics
-```
-
-### `todo`
-**The MVP Feature 👑**. The Kreuzerlübung Nag.
-Checks specifically for:
-1. Deadlines < 24 hours
-2. **AND** 0 ticked examples
-
-Ideally, this output is empty. If it's not, **you need to act immediately.**
+Add to your `.bashrc` or `.zshrc`:
 
 ```bash
-tiss-tuwel-cli todo
+tiss-tuwel-cli rc
 ```
 
-### `courses`
-List everything you are currently suffering through (enrolled courses).
+Output example: `📅 2 deadlines | ⚠️ 1 urgent | 🎓 1 exam reg`
 
-```bash
-tiss-tuwel-cli courses
-```
-
-### `assignments`
-Lists all active assignments. Highlights deadlines so you can panic appropriately.
-
-```bash
-tiss-tuwel-cli assignments
-```
-
-### `checkmarks`
-Shows how many examples you've ticked vs. total for all your courses. Prevents the "I solved it but forgot to tick it" fail condition.
-
-```bash
-tiss-tuwel-cli checkmarks
-```
-
-### `grades [course_id]`
-Fetches the deeply nested, confusing grade table from TUWEL and renders it as a beautiful, readable tree.
-
-```bash
-tiss-tuwel-cli grades 12345
-```
-
-### `download [course_id]`
-The Data Hoarder Special. Recursively crawls a course and downloads every file resource to your local `Downloads/Tuwel/` folder.
-Perfect for offline studying (lol) or archiving materials before they vanish.
-
-```bash
-tiss-tuwel-cli download 12345
-```
-
-### `tiss-course [number] [semester]`
-Queries the TISS public API for course info and upcoming exam dates. Now with XML parsing for those legacy endpoints.
-
-```bash
-tiss-tuwel-cli tiss-course 185.A91 2025W
-```
+Configure displayed widgets via `tiss-tuwel-cli settings`.
 
 ### Interactive Mode
-Prefer a menu because remembering commands is hard? We got you.
 
 ```bash
 tiss-tuwel-cli -i
 ```
-Navigate through your courses, view grades, and check deadlines with a TUI.
 
-## 🐛 Known Issues & Quirks
+Menu-driven interface organized into:
+- **📚 Study** - Courses, Assignments, Checkmarks, Grades, Participation
+- **📅 Planning & Deadlines** - Dashboard, Weekly, Timeline, Urgent Tasks
+- **🛠️ Tools & Utilities** - Unified View, Exam Registration, Export Calendar, TISS Search
+- **⚙️ Settings** - Configure widgets, auto-login, credentials
 
-- **"Access Control Exception"**: Moodle hates us. If login throws this, ignore it. If the token is saved, most features usually work anyway.
-- **TISS Limitations**: The TISS public API is read-only. We can't register you for exams yet (mostly because we don't want to accidentally deregister you from your Bachelor thesis).
-- **Windows**: If the TUI looks weird, try using Windows Terminal instead of the legacy CMD.
+## Settings
+
+Access via `tiss-tuwel-cli settings` or interactive menu:
+
+- **Auto-login** - Silent re-authentication when token expires
+- **RC Widgets** - Choose what appears in the `rc` command output
+- **Setup Wizard** - Guided initial configuration
+- **Credential Management** - Save or delete stored credentials
+
+## Known Issues
+
+- **"Access Control Exception"**: Moodle quirk. Usually still works if token is saved.
+- **TISS Limitations**: Read-only API. Cannot register for exams.
+- **Windows**: Use Windows Terminal if display issues occur.
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions welcome. Submit a Pull Request.
 
 ### Credits
-- TUWEL API info from [student-api-documentation](https://github.com/tuwel-api/student-api-documentation).
-- TISS API info from [tiss public-api](https://tiss.tuwien.ac.at/api/dokumentation).
+- TUWEL API: [student-api-documentation](https://github.com/tuwel-api/student-api-documentation)
+- TISS API: [tiss public-api](https://tiss.tuwien.ac.at/api/dokumentation)
